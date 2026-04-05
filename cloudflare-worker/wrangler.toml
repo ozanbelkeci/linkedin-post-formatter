@@ -1,0 +1,31 @@
+# Cloudflare Workers — LinkedIn Post Formatter Proxy
+# Deploy: wrangler deploy
+
+name       = "linkedin-post-formatter-api"
+main       = "worker.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# ── KV Namespace ──────────────────────────────
+# Oluşturma komutu:
+#   wrangler kv:namespace create RATE_LIMIT_KV
+# Çıktısındaki id'yi aşağıya yapıştır.
+
+[[kv_namespaces]]
+binding = "RATE_LIMIT_KV"
+id      = "1f949b64209d44e6a31fcef0ac2abb43"
+
+# Preview (local test) için ayrı KV:
+# [[kv_namespaces]]
+# binding     = "RATE_LIMIT_KV"
+# id          = "1f949b64209d44e6a31fcef0ac2abb43"
+# preview_id  = "BURAYA_PREVIEW_KV_ID_YAZAR"
+
+# ── Environment Variables ─────────────────────
+# GEMINI_API_KEY'i secret olarak ekle (toml'a yazma!):
+#   wrangler secret put GEMINI_API_KEY
+# Çalıştır, sonra API key'i yapıştır.
+
+# ── Deployment ────────────────────────────────
+# Production:  wrangler deploy
+# Local test:  wrangler dev

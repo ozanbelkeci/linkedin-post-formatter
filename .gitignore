@@ -1,0 +1,14 @@
+# Wrangler build artifacts
+.wrangler/
+
+# Node modules
+node_modules/
+
+# Environment / secrets
+.env
+.env.local
+*.secret
+
+# OS
+.DS_Store
+Thumbs.db
