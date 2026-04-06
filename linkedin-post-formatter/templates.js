@@ -10,6 +10,16 @@ function parseLines(text) {
 }
 
 /**
+ * Satır başındaki madde işaretlerini temizler.
+ * Modelin eklediği •, -, *, →, ▸, rakam+nokta vb. karakterleri siler.
+ */
+function stripBullet(line) {
+  return line
+    .replace(/^(\d+[.)]\s*|[•·\-\*→▸▶️✓✗–—]\s*)/, '')
+    .trim();
+}
+
+/**
  * Metni noktalama işaretine göre cümlelere böler.
  */
 function parseSentences(text) {
@@ -18,12 +28,25 @@ function parseSentences(text) {
 }
 
 /**
- * Gemini'nin ||| ile ayırdığı bölümleri parse eder.
+ * Bölüm başındaki model etiketlerini temizler.
+ * **HOOK**, GELİŞME:, 1. BÖLÜM: gibi kalıpları kaldırır.
+ */
+function cleanSection(text) {
+  return text
+    .replace(/^\*\*[^*\n]+\*\*\s*[\n:]*/, '')   // **ETIKET** veya **ETIKET**: kaldır
+    .replace(/^[A-ZÇĞİÖŞÜ\s\d.]+[:\-]\s*/u, '') // BÜYÜK HARF ETİKET: kaldır
+    .replace(/^\d+\.\s+/, '')                    // "1. " gibi numaraları kaldır
+    .trim();
+}
+
+/**
+ * AI çıktısındaki ||| ile ayrılmış bölümleri parse eder.
  * Her zaman `expected` sayıda eleman döner; eksik bölümler '' olur.
+ * Her bölüm model tarafından eklenen etiketlerden arındırılır.
  */
 function parseSections(text, expected = 3) {
   if (!text || !text.trim()) return Array(expected).fill('');
-  const sections = text.split('|||').map(s => s.trim());
+  const sections = text.split('|||').map(s => cleanSection(s));
   // ||| yoksa: tüm metin birinci bölüm, geri kalanlar boş
   if (sections.length === 1 && expected > 1) {
     const result = [sections[0]];
@@ -126,7 +149,7 @@ const TEMPLATE_HIKAYE = {
 
     let out = '';
     if (hook)    out += endWithDot(hook) + '\n\n';
-    if (gelisme) out += gelisme.split('\n').filter(Boolean).map(endWithDot).join(' ') + '\n\n';
+    if (gelisme) out += gelisme.split('\n').filter(Boolean).map(l => endWithDot(stripBullet(l))).join(' ') + '\n\n';
     if (ders)    out += `💡 ${endWithDot(ders)}\n\n`;
     out += '―\n\n' + cta;
     return out.trim();
@@ -154,7 +177,7 @@ const TEMPLATE_LISTE = {
       if (baslik) out += endWithDot(baslik) + '\n\n';
 
       const items = maddeler
-        ? maddeler.split('\n').map(l => l.trim()).filter(Boolean)
+        ? maddeler.split('\n').map(l => stripBullet(l)).filter(Boolean)
         : [];
       items.slice(0, 10).forEach((item, i) => {
         out += `${nums[i] || '▶️'} ${endWithDot(item)}\n\n`;
@@ -200,7 +223,7 @@ const TEMPLATE_FIKIR = {
 
     let out = '';
     if (iddia)   out += endWithDot(iddia) + '\n\n';
-    if (gerekce) out += gerekce.split('\n').filter(Boolean).map(endWithDot).join('\n\n') + '\n\n';
+    if (gerekce) out += gerekce.split('\n').filter(Boolean).map(l => endWithDot(stripBullet(l))).join('\n\n') + '\n\n';
     if (meydan)  out += `→ ${endWithDot(meydan)}\n\n`;
     out += '―\n\n' + cta;
     return out.trim();
@@ -253,7 +276,7 @@ const TEMPLATE_IPUCU = {
     if (baslik) out += `🎯 ${endWithDot(baslik)}\n\n`;
     if (neden)  out += `Neden işe yarıyor: ${endWithDot(neden)}\n\n`;
     if (nasil) {
-      const steps = nasil.split('\n').map(l => l.trim()).filter(Boolean);
+      const steps = nasil.split('\n').map(l => stripBullet(l)).filter(Boolean);
       if (steps.length > 1) {
         out += 'Nasıl yapılır:\n\n';
         steps.forEach(s => { out += `→ ${endWithDot(s)}\n`; });
@@ -306,7 +329,7 @@ const TEMPLATE_ISTATISTIK = {
 
     let out = '';
     if (veri)    out += `📊 "${endWithDot(veri)}"\n\n`;
-    if (anlam)   out += anlam.split('\n').filter(Boolean).map(endWithDot).join('\n\n') + '\n\n';
+    if (anlam)   out += anlam.split('\n').filter(Boolean).map(l => endWithDot(stripBullet(l))).join('\n\n') + '\n\n';
     if (cikarim) out += `→ ${endWithDot(cikarim)}\n\n`;
     out += '―\n\n' + cta;
     return out.trim();
@@ -331,7 +354,7 @@ const TEMPLATE_BASARI = {
     let out = '';
     if (basari) out += endWithDot(basari) + '\n\n';
     if (faktorler) {
-      const items = faktorler.split('\n').map(l => l.trim()).filter(Boolean);
+      const items = faktorler.split('\n').map(l => stripBullet(l)).filter(Boolean);
       out += 'Bunu mümkün kılanlar:\n\n';
       items.slice(0, 5).forEach((item, i) => {
         out += `${icons[i] || '▶️'} ${endWithDot(item)}\n\n`;
@@ -359,7 +382,7 @@ const TEMPLATE_HATA = {
 
     let out = '';
     if (hata)      out += endWithDot(hata) + '\n\n';
-    if (ne_yanlis) out += ne_yanlis.split('\n').filter(Boolean).map(endWithDot).join('\n\n') + '\n\n';
+    if (ne_yanlis) out += ne_yanlis.split('\n').filter(Boolean).map(l => endWithDot(stripBullet(l))).join('\n\n') + '\n\n';
     if (ders)      out += `💡 Ders: ${endWithDot(ders)}\n\n`;
     out += '―\n\n' + cta;
     return out.trim();
@@ -407,7 +430,7 @@ const TEMPLATE_MANIFESTO = {
     let out = '';
     if (giris) out += endWithDot(giris) + '\n\n';
     if (ilkeler) {
-      const items = ilkeler.split('\n').map(l => l.trim()).filter(Boolean);
+      const items = ilkeler.split('\n').map(l => stripBullet(l)).filter(Boolean);
       items.forEach(item => { out += `▸ ${endWithDot(item)}\n\n`; });
     }
     if (kapanis) out += endWithDot(kapanis) + '\n\n';
@@ -457,7 +480,7 @@ const TEMPLATE_KARAR = {
     let out = '';
     if (karar) out += endWithDot(karar) + '\n\n';
     if (gerekceler) {
-      const items = gerekceler.split('\n').map(l => l.trim()).filter(Boolean);
+      const items = gerekceler.split('\n').map(l => stripBullet(l)).filter(Boolean);
       items.forEach(item => { out += `• ${endWithDot(item)}\n`; });
       out += '\n';
     }
@@ -484,7 +507,7 @@ const TEMPLATE_TAVSIYE = {
     let out = '';
     if (giris) out += endWithDot(giris) + '\n\n';
     if (tavsiyeler) {
-      const items = tavsiyeler.split('\n').map(l => l.trim()).filter(Boolean);
+      const items = tavsiyeler.split('\n').map(l => stripBullet(l)).filter(Boolean);
       items.forEach((item, i) => { out += `${i + 1}. ${endWithDot(item)}\n\n`; });
     }
     if (kapanis) out += endWithDot(kapanis) + '\n\n';

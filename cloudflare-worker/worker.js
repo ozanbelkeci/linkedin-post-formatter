@@ -35,190 +35,214 @@ const CORS_HEADERS = {
 /* ─────────────────────────────────────────────
    PROMPT BUILDER FONKSİYONLARI
    Her builder { system, user } döndürür.
-   system: model persona + format kuralları
-   user:   sadece işlenecek metin
-   Bölümler ||| ile ayrılır.
+   system: model persona + bölüm tanımları + format kuralı
+   user:   sadece ham metin
+   Bölümler ||| ile ayrılır — örnek metinler system'de.
 ───────────────────────────────────────────── */
 
-const SYS_BASE = `Sen profesyonel bir Türkçe LinkedIn içerik yazarısın.
-ÇIKTI KURALI: Yalnızca istenen metin bölümlerini yaz. Açıklama, başlık, etiket, numara veya talimat metni EKLEME.
-Yazım ve noktalama hatalarını düzelt. Türk alfabesini doğru kullan (ş ç ğ ü ö ı İ).`;
+/**
+ * Sistem mesajı: persona + içerik kalitesi + format zorunluluğu.
+ * sections: [{ ad, açıklama }] dizisi
+ * Çıktı: system string
+ */
+function buildSystem(sections) {
+  const bolumAciklamalari = sections.map((s, i) =>
+    `${i + 1}. ${s.ad}: ${s.aciklama}`
+  ).join('\n');
+
+  return `Sen deneyimli bir LinkedIn içerik stratejistisin. Türkçe yazıyorsun.
+
+GÖREV:
+- Kullanıcının metnini daha çekici, akıcı ve LinkedIn'e uygun hale getir.
+- Yazım ve noktalama hatalarını düzelt (ş ç ğ ü ö ı İ).
+- Ana fikri ve gerçek deneyimi koru; kendi yorumunu ve güçlendirici ifadeler ekleyebilirsin.
+- Metni abartma, doğal ve samimi tut.
+
+YANIT FORMATI — KESİNLİKLE UY:
+Yanıtın ${sections.length} bölümden oluşmalı. Bölümleri birbirinden ayırmak için aralarına ||| yaz.
+Etiket, numara, açıklama veya başlık YAZMA. Sadece bölüm içeriklerini yaz.
+
+BÖLÜM TANIMLARI:
+${bolumAciklamalari}`;
+}
 
 /** Genel düzeltme modu (fallback) */
 function buildPrompt(text) {
   return {
-    system: `${SYS_BASE}
-Görevin: Metni düzelt ve iyileştir. Sadece düzeltilmiş metni döndür, başka hiçbir şey yazma.`,
+    system: `Sen deneyimli bir LinkedIn içerik stratejistisin. Türkçe yazıyorsun.
+Metni daha çekici ve akıcı hale getir. Yazım hatalarını düzelt. Ana fikri koru.
+ÇIKTI KURALI: Sadece düzeltilmiş ve iyileştirilmiş metni döndür, başka hiçbir şey yazma.`,
     user: text,
   };
-}
-
-/** Şablon prompt'larında kullanılan user mesaj şablonu */
-function userMsg(text, bolumler, ornek) {
-  return `Aşağıdaki metni ${bolumler} bölüme ayır. Bölümler arasına tam olarak ||| karakterini koy. Başka hiçbir şey yazma.
-
-Beklenen format: ${ornek}
-
-METİN:
-${text}`;
 }
 
 /** hikaye: Kişisel dönüşüm hikayesi */
 function buildHikayePrompt(text) {
   return {
-    system: `${SYS_BASE}
-Bölüm 1: Merak uyandıran kısa açılış cümlesi (hook).
-Bölüm 2: Hikayenin gelişimi — ne yaşandı (2-4 cümle).
-Bölüm 3: Öğrenilen ders veya dönüşüm (1-2 cümle).`,
-    user: userMsg(text, '3', 'Hook cümlesi.|||Gelişme paragrafı.|||Ders cümlesi.'),
+    system: buildSystem([
+      { ad: 'HOOK',    aciklama: 'Okuyucuyu ilk cümleden yakalayan merak uyandırıcı açılış (1-2 cümle).' },
+      { ad: 'GELİŞME', aciklama: 'Hikayenin gövdesi — ne yaşandı, süreç nasıl ilerledi (2-4 cümle).' },
+      { ad: 'DERS',    aciklama: 'Bu deneyimden çıkarılan öğrenim veya dönüşüm (1-2 cümle).' },
+    ]),
+    user: text,
   };
 }
 
 /** liste: Adım adım liste */
 function buildListePrompt(text) {
   return {
-    system: `${SYS_BASE}
-Bölüm 1: Tek cümle başlık.
-Bölüm 2: Her adım veya eylem ayrı satırda, madde işareti EKLEME.
-Bölüm 3: Kapanış / çıkarım cümlesi (yoksa boş bırak).`,
-    user: userMsg(text, '3', 'Başlık.|||Madde 1\nMadde 2\nMadde 3|||Sonuç cümlesi.'),
+    system: buildSystem([
+      { ad: 'BAŞLIK',   aciklama: 'Tek cümle açılış / hook.' },
+      { ad: 'MADDELER', aciklama: 'Her adım veya eylem ayrı satırda. Madde işareti veya numara EKLEME.' },
+      { ad: 'SONUÇ',    aciklama: 'Kapanış veya çıkarım cümlesi. Metinde yoksa boş bırak.' },
+    ]),
+    user: text,
   };
 }
 
 /** fikir: Görüş / kanaat paylaşımı */
 function buildFikirPrompt(text) {
   return {
-    system: `${SYS_BASE}
-Bölüm 1: Ana görüş veya iddia (1-2 güçlü cümle).
-Bölüm 2: Destekleyici argüman veya örnekler (2-4 cümle).
-Bölüm 3: Okuyucuyu düşündüren meydan okuma (1-2 cümle).`,
-    user: userMsg(text, '3', 'İddia cümlesi.|||Gerekçe paragrafı.|||Meydan okuma.'),
+    system: buildSystem([
+      { ad: 'İDDİA',        aciklama: 'Ana görüş veya iddia — güçlü ve net (1-2 cümle).' },
+      { ad: 'GEREKÇE',      aciklama: 'Destekleyici argüman veya örnekler (2-4 cümle).' },
+      { ad: 'MEYDAN OKUMA', aciklama: 'Okuyucuyu düşündüren, tartışmaya kapı açan son (1-2 cümle).' },
+    ]),
+    user: text,
   };
 }
 
 /** vaka: Before/after vaka çalışması */
 function buildVakaPrompt(text) {
   return {
-    system: `${SYS_BASE}
-Bölüm 1: Vakanın genel bağlamı (1-2 cümle).
-Bölüm 2: Başlangıç / önceki durum (1-3 cümle).
-Bölüm 3: Uygulanan çözüm ve sonuç — rakamları koru (1-3 cümle).
-Bölüm 4: Genel ders veya öneri (1-2 cümle).`,
-    user: userMsg(text, '4', 'Genel bakış.|||Önce.|||Sonra.|||Çıkarım.'),
+    system: buildSystem([
+      { ad: 'GENEL BAKIŞ', aciklama: 'Vakanın konusu ve bağlamı (1-2 cümle).' },
+      { ad: 'ÖNCE',        aciklama: 'Başlangıç durumu — problem neydi (1-3 cümle).' },
+      { ad: 'SONRA',       aciklama: 'Çözüm ve sonuç — rakamları koru (1-3 cümle).' },
+      { ad: 'ÇIKARIM',     aciklama: 'Genel ders veya öneri (1-2 cümle).' },
+    ]),
+    user: text,
   };
 }
 
 /** ipucu: Pratik ipucu / hızlı öneri */
 function buildIpucuPrompt(text) {
   return {
-    system: `${SYS_BASE}
-Bölüm 1: İpucunu tanıtan dikkat çekici tek cümle.
-Bölüm 2: Neden işe yaradığı (1-2 cümle).
-Bölüm 3: Nasıl uygulanır, her adım ayrı satırda (1-4 satır).`,
-    user: userMsg(text, '3', 'İpucu başlığı.|||Neden açıklaması.|||Adım 1\nAdım 2'),
+    system: buildSystem([
+      { ad: 'BAŞLIK', aciklama: 'İpucunu tanıtan dikkat çekici tek cümle.' },
+      { ad: 'NEDEN',  aciklama: 'Neden işe yaradığı (1-2 cümle).' },
+      { ad: 'NASIL',  aciklama: 'Uygulama adımları — her adım ayrı satırda (1-4 satır).' },
+    ]),
+    user: text,
   };
 }
 
 /** soru: Merak uyandıran soru */
 function buildSoruPrompt(text) {
   return {
-    system: `${SYS_BASE}
-Bölüm 1: Soruyu anlamlı kılan kısa bağlam (1-2 cümle).
-Bölüm 2: Tek net soru cümlesi, ? ile bitmeli.
-Bölüm 3: Okuyucuyu düşündüren not (1-2 cümle).`,
-    user: userMsg(text, '3', 'Bağlam cümlesi.|||Ana soru?|||Düşündürücü not.'),
+    system: buildSystem([
+      { ad: 'BAĞLAM',     aciklama: 'Soruyu anlamlı kılan kısa bağlam (1-2 cümle).' },
+      { ad: 'SORU',       aciklama: 'Ana soru cümlesi — ? ile bitmeli.' },
+      { ad: 'İLGİNÇ YAN', aciklama: 'Okuyucuyu düşündüren ek not (1-2 cümle).' },
+    ]),
+    user: text,
   };
 }
 
 /** istatistik: Veri/sayı odaklı paylaşım */
 function buildIstatistikPrompt(text) {
   return {
-    system: `${SYS_BASE}
-Tüm rakamları ve istatistikleri koru.
-Bölüm 1: Ana istatistik veya bulgu (1-2 cümle).
-Bölüm 2: Bu verinin önemi ve anlamı (2-3 cümle).
-Bölüm 3: Çıkarım veya aksiyon önerisi (1-2 cümle).`,
-    user: userMsg(text, '3', 'Veri cümlesi.|||Anlam açıklaması.|||Çıkarım.'),
+    system: buildSystem([
+      { ad: 'VERİ',      aciklama: 'Ana istatistik veya bulgu — rakamları koru (1-2 cümle).' },
+      { ad: 'ANLAM',     aciklama: 'Bu verinin önemi ve sektör için anlamı (2-3 cümle).' },
+      { ad: 'ÇIKARIM',   aciklama: 'Aksiyon önerisi veya ders (1-2 cümle).' },
+    ]),
+    user: text,
   };
 }
 
 /** basari: Başarı/kazanım paylaşımı */
 function buildBasariPrompt(text) {
   return {
-    system: `${SYS_BASE}
-Rakamları koru.
-Bölüm 1: Başarı veya kazanım (1-2 cümle).
-Bölüm 2: Bunu mümkün kılan 2-4 faktör — her faktör ayrı satırda.
-Bölüm 3: Alçakgönüllü yansıma veya minnet (1-2 cümle).`,
-    user: userMsg(text, '3', 'Başarı cümlesi.|||Faktör 1\nFaktör 2\nFaktör 3|||Yansıma.'),
+    system: buildSystem([
+      { ad: 'BAŞARI',    aciklama: 'Başarı veya kazanım — rakamları koru (1-2 cümle).' },
+      { ad: 'FAKTÖRLER', aciklama: 'Bunu mümkün kılan 2-4 faktör — her faktör ayrı satırda.' },
+      { ad: 'YANSIMA',   aciklama: 'Alçakgönüllü yansıma veya minnet (1-2 cümle).' },
+    ]),
+    user: text,
   };
 }
 
 /** hata: Hata/ders paylaşımı */
 function buildHataPrompt(text) {
   return {
-    system: `${SYS_BASE}
-Bölüm 1: Yapılan hata veya yanlış karar, dürüst ve açık bir dille (1-2 cümle).
-Bölüm 2: Ne yanlış gitti, neden (2-3 cümle).
-Bölüm 3: Öğrenilen ders (1-2 cümle).`,
-    user: userMsg(text, '3', 'Hata cümlesi.|||Ne yanlış gitti.|||Ders.'),
+    system: buildSystem([
+      { ad: 'HATA',           aciklama: 'Yapılan hata — dürüst ve açık dille (1-2 cümle).' },
+      { ad: 'NE YANLIŞ GİTTİ', aciklama: 'Hatanın nedeni ve süreci (2-3 cümle).' },
+      { ad: 'DERS',           aciklama: 'Öğrenilen ders (1-2 cümle).' },
+    ]),
+    user: text,
   };
 }
 
 /** karsilastirma: Eski vs Yeni karşılaştırması */
 function buildKarsilastirmaPrompt(text) {
   return {
-    system: `${SYS_BASE}
-Bölüm 1: Neyin karşılaştırıldığı (1 cümle).
-Bölüm 2: Eski yöntem veya durum (1-2 cümle).
-Bölüm 3: Yeni yöntem veya durum (1-2 cümle).
-Bölüm 4: En kritik fark veya kazanım (1-2 cümle).`,
-    user: userMsg(text, '4', 'Konu.|||Eski durum.|||Yeni durum.|||Temel fark.'),
+    system: buildSystem([
+      { ad: 'KONU',       aciklama: 'Neyin karşılaştırıldığı (1 cümle).' },
+      { ad: 'ESKİ',       aciklama: 'Eski yöntem veya durum (1-2 cümle).' },
+      { ad: 'YENİ',       aciklama: 'Yeni yöntem veya durum (1-2 cümle).' },
+      { ad: 'TEMEL FARK', aciklama: 'En kritik fark veya kazanım (1-2 cümle).' },
+    ]),
+    user: text,
   };
 }
 
 /** manifesto: Kişisel ilkeler / inanç bildirisi */
 function buildManifestoPrompt(text) {
   return {
-    system: `${SYS_BASE}
-Bölüm 1: Manifestonun temasını tanıtan güçlü tek cümle.
-Bölüm 2: Her ilkeyi ayrı satıra yaz — kısa ve vurucu.
-Bölüm 3: İlkelerin neden önemli olduğu (1-2 cümle).`,
-    user: userMsg(text, '3', 'Tema.|||İlke 1\nİlke 2\nİlke 3|||Kapanış.'),
+    system: buildSystem([
+      { ad: 'GİRİŞ',   aciklama: 'Manifestonun temasını tanıtan güçlü tek cümle.' },
+      { ad: 'İLKELER', aciklama: 'Her ilke ayrı satırda — kısa ve vurucu.' },
+      { ad: 'KAPANIŞ', aciklama: 'İlkelerin önemi veya taahhüt (1-2 cümle).' },
+    ]),
+    user: text,
   };
 }
 
 /** mektup: Geçmiş/gelecek benliğe mektup */
 function buildMektupPrompt(text) {
   return {
-    system: `${SYS_BASE}
-Sıcak ve samimi bir dil kullan.
-Bölüm 1: Mektubun açılışı, kime yazıldığını hissettir (1-2 cümle).
-Bölüm 2: Ana mesaj, öğrenilen veya tavsiye edilen (2-4 cümle).
-Bölüm 3: Umut veya temenni ile kapanış (1-2 cümle, yoksa boş bırak).`,
-    user: userMsg(text, '3', 'Açılış cümlesi.|||Ana mesaj.|||Kapanış.'),
+    system: buildSystem([
+      { ad: 'AÇILIŞ', aciklama: 'Mektubun açılışı, kime yazıldığını hissettir (1-2 cümle). Sıcak ve samimi.' },
+      { ad: 'ANA MESAJ', aciklama: 'Ana mesaj — öğrenilen veya tavsiye edilen (2-4 cümle).' },
+      { ad: 'KAPANIŞ', aciklama: 'Umut veya temenni (1-2 cümle). Yoksa boş bırak.' },
+    ]),
+    user: text,
   };
 }
 
 /** karar: Zor karar verme süreci */
 function buildKararPrompt(text) {
   return {
-    system: `${SYS_BASE}
-Bölüm 1: Verilen karar, net ve kararlı bir dille (1-2 cümle).
-Bölüm 2: 2-4 gerekçe — her gerekçe ayrı satırda.
-Bölüm 3: Kararın sonucu veya öğrenilen ders (1-2 cümle).`,
-    user: userMsg(text, '3', 'Karar cümlesi.|||Gerekçe 1\nGerekçe 2\nGerekçe 3|||Yansıma.'),
+    system: buildSystem([
+      { ad: 'KARAR',     aciklama: 'Verilen karar — net ve kararlı (1-2 cümle).' },
+      { ad: 'GEREKÇELER', aciklama: '2-4 gerekçe — her gerekçe ayrı satırda.' },
+      { ad: 'YANSIMA',   aciklama: 'Kararın sonucu veya öğrenilen ders (1-2 cümle).' },
+    ]),
+    user: text,
   };
 }
 
 /** tavsiye: Pratik tavsiye listesi */
 function buildTavsiyePrompt(text) {
   return {
-    system: `${SYS_BASE}
-Bölüm 1: Tavsiyelerin bağlamı ve kime hitap ettiği (1-2 cümle).
-Bölüm 2: Her tavsiyeyi ayrı satıra yaz, numarasız düz cümle.
-Bölüm 3: Özet veya son mesaj (1-2 cümle).`,
-    user: userMsg(text, '3', 'Bağlam.|||Tavsiye 1\nTavsiye 2\nTavsiye 3|||Kapanış.'),
+    system: buildSystem([
+      { ad: 'GİRİŞ',     aciklama: 'Tavsiyelerin bağlamı ve kime hitap ettiği (1-2 cümle).' },
+      { ad: 'TAVSİYELER', aciklama: 'Her tavsiye ayrı satırda — numarasız, düz cümle.' },
+      { ad: 'KAPANIŞ',   aciklama: 'Özet veya son mesaj (1-2 cümle).' },
+    ]),
+    user: text,
   };
 }
 
