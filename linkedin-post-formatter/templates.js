@@ -15,10 +15,9 @@ function parseLines(text) {
  */
 function stripBullet(line) {
   return line
+    .replace(/\*\*/g, '')                        // ** karakterlerini tamamen sil
     .replace(/^\d+\.\d+\.?\s*/, '')              // "1.1." veya "1.2" alt numaralar
     .replace(/^(\d+[.)]\s*|[•·\-\*→▸▶️✓✗–—]\s*)/, '')
-    .replace(/\*\*([^*]+)\*\*/g, '$1')           // **kalın** → kalın
-    .replace(/\*([^*\n]+)\*/g, '$1')             // *italik* → italik
     .trim();
 }
 
@@ -36,11 +35,9 @@ function parseSentences(text) {
  */
 function cleanSection(text) {
   return text
-    .replace(/^\*\*[^*\n]+\*\*\s*[\n:]*/, '')   // **ETIKET** veya **ETIKET**: kaldır
+    .replace(/\*\*/g, '')                        // ** karakterlerini tamamen sil (LinkedIn markdown desteklemiyor)
     .replace(/^[A-ZÇĞİÖŞÜ\s\d.]+[:\-]\s*/u, '') // BÜYÜK HARF ETİKET: kaldır
-    .replace(/^\d+\.\s+/, '')                    // "1. " gibi numaraları kaldır
-    .replace(/\*\*([^*]+)\*\*/g, '$1')           // **kalın** → kalın (LinkedIn markdown desteklemiyor)
-    .replace(/\*([^*\n]+)\*/g, '$1')             // *italik* → italik
+    .replace(/^\d+\.\s+/, '')                    // "1. " başındaki numaraları kaldır
     .trim();
 }
 
