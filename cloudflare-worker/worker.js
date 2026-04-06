@@ -80,9 +80,9 @@ Metni daha çekici ve akıcı hale getir. Yazım hatalarını düzelt. Ana fikri
 function buildHikayePrompt(text) {
   return {
     system: buildSystem([
-      { ad: 'HOOK',    aciklama: 'Okuyucuyu ilk cümleden yakalayan merak uyandırıcı açılış (1-2 cümle).' },
-      { ad: 'GELİŞME', aciklama: 'Hikayenin gövdesi — ne yaşandı, süreç nasıl ilerledi (2-4 cümle).' },
-      { ad: 'DERS',    aciklama: 'Bu deneyimden çıkarılan öğrenim veya dönüşüm (1-2 cümle).' },
+      { ad: 'açılış',  aciklama: 'Okuyucuyu ilk cümleden yakalayan merak uyandırıcı açılış (1-2 cümle).' },
+      { ad: 'gelişme', aciklama: 'Hikayenin gövdesi — ne yaşandı, süreç nasıl ilerledi (2-4 cümle).' },
+      { ad: 'ders',    aciklama: 'Bu deneyimden çıkarılan öğrenim veya dönüşüm (1-2 cümle).' },
     ]),
     user: text,
   };
@@ -92,9 +92,9 @@ function buildHikayePrompt(text) {
 function buildListePrompt(text) {
   return {
     system: buildSystem([
-      { ad: 'BAŞLIK',   aciklama: 'Tek cümle açılış / hook.' },
-      { ad: 'MADDELER', aciklama: 'Her adım veya eylem ayrı satırda. Madde işareti veya numara EKLEME.' },
-      { ad: 'SONUÇ',    aciklama: 'Kapanış veya çıkarım cümlesi. Metinde yoksa boş bırak.' },
+      { ad: 'başlık',   aciklama: 'Tek cümle açılış / hook.' },
+      { ad: 'maddeler', aciklama: 'Her adım veya eylem ayrı satırda. Madde işareti veya numara EKLEME.' },
+      { ad: 'sonuç',    aciklama: 'Kapanış veya çıkarım cümlesi. Metinde yoksa boş bırak.' },
     ]),
     user: text,
   };
@@ -104,9 +104,9 @@ function buildListePrompt(text) {
 function buildFikirPrompt(text) {
   return {
     system: buildSystem([
-      { ad: 'İDDİA',        aciklama: 'Ana görüş veya iddia — güçlü ve net (1-2 cümle).' },
-      { ad: 'GEREKÇE',      aciklama: 'Destekleyici argüman veya örnekler (2-4 cümle).' },
-      { ad: 'MEYDAN OKUMA', aciklama: 'Okuyucuyu düşündüren, tartışmaya kapı açan son (1-2 cümle).' },
+      { ad: 'iddia',        aciklama: 'Ana görüş veya iddia — güçlü ve net (1-2 cümle).' },
+      { ad: 'gerekçe',      aciklama: 'Destekleyici argüman veya örnekler (2-4 cümle).' },
+      { ad: 'meydan okuma', aciklama: 'Okuyucuyu düşündüren, tartışmaya kapı açan son (1-2 cümle).' },
     ]),
     user: text,
   };
@@ -116,10 +116,10 @@ function buildFikirPrompt(text) {
 function buildVakaPrompt(text) {
   return {
     system: buildSystem([
-      { ad: 'GENEL BAKIŞ', aciklama: 'Vakanın konusu ve bağlamı (1-2 cümle).' },
-      { ad: 'ÖNCE',        aciklama: 'Başlangıç durumu — problem neydi (1-3 cümle).' },
-      { ad: 'SONRA',       aciklama: 'Çözüm ve sonuç — rakamları koru (1-3 cümle).' },
-      { ad: 'ÇIKARIM',     aciklama: 'Genel ders veya öneri (1-2 cümle).' },
+      { ad: 'genel bakış', aciklama: 'Vakanın konusu ve bağlamı (1-2 cümle).' },
+      { ad: 'önce',        aciklama: 'Başlangıç durumu — problem neydi (1-3 cümle).' },
+      { ad: 'sonra',       aciklama: 'Çözüm ve sonuç — rakamları koru (1-3 cümle).' },
+      { ad: 'çıkarım',     aciklama: 'Genel ders veya öneri (1-2 cümle).' },
     ]),
     user: text,
   };
@@ -129,9 +129,9 @@ function buildVakaPrompt(text) {
 function buildIpucuPrompt(text) {
   return {
     system: buildSystem([
-      { ad: 'BAŞLIK', aciklama: 'İpucunu tanıtan dikkat çekici tek cümle.' },
-      { ad: 'NEDEN',  aciklama: 'Neden işe yaradığı (1-2 cümle).' },
-      { ad: 'NASIL',  aciklama: 'Uygulama adımları — her adım ayrı satırda (1-4 satır).' },
+      { ad: 'başlık', aciklama: 'İpucunu tanıtan dikkat çekici tek cümle.' },
+      { ad: 'neden',  aciklama: 'Neden işe yaradığı (1-2 cümle).' },
+      { ad: 'nasıl',  aciklama: 'Uygulama adımları — her adım ayrı satırda (1-4 satır).' },
     ]),
     user: text,
   };
@@ -141,9 +141,9 @@ function buildIpucuPrompt(text) {
 function buildSoruPrompt(text) {
   return {
     system: buildSystem([
-      { ad: 'BAĞLAM',     aciklama: 'Soruyu anlamlı kılan kısa bağlam (1-2 cümle).' },
-      { ad: 'SORU',       aciklama: 'Ana soru cümlesi — ? ile bitmeli.' },
-      { ad: 'İLGİNÇ YAN', aciklama: 'Okuyucuyu düşündüren ek not (1-2 cümle).' },
+      { ad: 'bağlam',     aciklama: 'Soruyu anlamlı kılan kısa bağlam (1-2 cümle).' },
+      { ad: 'soru',       aciklama: 'Ana soru cümlesi — ? ile bitmeli.' },
+      { ad: 'ilginç yan', aciklama: 'Okuyucuyu düşündüren ek not (1-2 cümle).' },
     ]),
     user: text,
   };
@@ -153,9 +153,9 @@ function buildSoruPrompt(text) {
 function buildIstatistikPrompt(text) {
   return {
     system: buildSystem([
-      { ad: 'VERİ',      aciklama: 'Ana istatistik veya bulgu — rakamları koru (1-2 cümle).' },
-      { ad: 'ANLAM',     aciklama: 'Bu verinin önemi ve sektör için anlamı (2-3 cümle).' },
-      { ad: 'ÇIKARIM',   aciklama: 'Aksiyon önerisi veya ders (1-2 cümle).' },
+      { ad: 'veri',    aciklama: 'Ana istatistik veya bulgu — rakamları koru (1-2 cümle).' },
+      { ad: 'anlam',   aciklama: 'Bu verinin önemi ve sektör için anlamı (2-3 cümle).' },
+      { ad: 'çıkarım', aciklama: 'Aksiyon önerisi veya ders (1-2 cümle).' },
     ]),
     user: text,
   };
@@ -165,9 +165,9 @@ function buildIstatistikPrompt(text) {
 function buildBasariPrompt(text) {
   return {
     system: buildSystem([
-      { ad: 'BAŞARI',    aciklama: 'Başarı veya kazanım — rakamları koru (1-2 cümle).' },
-      { ad: 'FAKTÖRLER', aciklama: 'Bunu mümkün kılan 2-4 faktör — her faktör ayrı satırda.' },
-      { ad: 'YANSIMA',   aciklama: 'Alçakgönüllü yansıma veya minnet (1-2 cümle).' },
+      { ad: 'başarı',    aciklama: 'Başarı veya kazanım — rakamları koru (1-2 cümle).' },
+      { ad: 'faktörler', aciklama: 'Bunu mümkün kılan 2-4 faktör — her faktör ayrı satırda.' },
+      { ad: 'yansıma',   aciklama: 'Alçakgönüllü yansıma veya minnet (1-2 cümle).' },
     ]),
     user: text,
   };
@@ -177,9 +177,9 @@ function buildBasariPrompt(text) {
 function buildHataPrompt(text) {
   return {
     system: buildSystem([
-      { ad: 'HATA',           aciklama: 'Yapılan hata — dürüst ve açık dille (1-2 cümle).' },
-      { ad: 'NE YANLIŞ GİTTİ', aciklama: 'Hatanın nedeni ve süreci (2-3 cümle).' },
-      { ad: 'DERS',           aciklama: 'Öğrenilen ders (1-2 cümle).' },
+      { ad: 'hata',            aciklama: 'Yapılan hata — dürüst ve açık dille (1-2 cümle).' },
+      { ad: 'ne yanlış gitti', aciklama: 'Hatanın nedeni ve süreci (2-3 cümle).' },
+      { ad: 'ders',            aciklama: 'Öğrenilen ders (1-2 cümle).' },
     ]),
     user: text,
   };
@@ -189,10 +189,10 @@ function buildHataPrompt(text) {
 function buildKarsilastirmaPrompt(text) {
   return {
     system: buildSystem([
-      { ad: 'KONU',       aciklama: 'Neyin karşılaştırıldığı (1 cümle).' },
-      { ad: 'ESKİ',       aciklama: 'Eski yöntem veya durum (1-2 cümle).' },
-      { ad: 'YENİ',       aciklama: 'Yeni yöntem veya durum (1-2 cümle).' },
-      { ad: 'TEMEL FARK', aciklama: 'En kritik fark veya kazanım (1-2 cümle).' },
+      { ad: 'konu',       aciklama: 'Neyin karşılaştırıldığı (1 cümle).' },
+      { ad: 'eski',       aciklama: 'Eski yöntem veya durum (1-2 cümle).' },
+      { ad: 'yeni',       aciklama: 'Yeni yöntem veya durum (1-2 cümle).' },
+      { ad: 'temel fark', aciklama: 'En kritik fark veya kazanım (1-2 cümle).' },
     ]),
     user: text,
   };
@@ -202,9 +202,9 @@ function buildKarsilastirmaPrompt(text) {
 function buildManifestoPrompt(text) {
   return {
     system: buildSystem([
-      { ad: 'GİRİŞ',   aciklama: 'Manifestonun temasını tanıtan güçlü tek cümle.' },
-      { ad: 'İLKELER', aciklama: 'Her ilke ayrı satırda — kısa ve vurucu.' },
-      { ad: 'KAPANIŞ', aciklama: 'İlkelerin önemi veya taahhüt (1-2 cümle).' },
+      { ad: 'giriş',   aciklama: 'Manifestonun temasını tanıtan güçlü tek cümle.' },
+      { ad: 'ilkeler', aciklama: 'Her ilke ayrı satırda — kısa ve vurucu.' },
+      { ad: 'kapanış', aciklama: 'İlkelerin önemi veya taahhüt (1-2 cümle).' },
     ]),
     user: text,
   };
@@ -214,9 +214,9 @@ function buildManifestoPrompt(text) {
 function buildMektupPrompt(text) {
   return {
     system: buildSystem([
-      { ad: 'AÇILIŞ', aciklama: 'Mektubun açılışı, kime yazıldığını hissettir (1-2 cümle). Sıcak ve samimi.' },
-      { ad: 'ANA MESAJ', aciklama: 'Ana mesaj — öğrenilen veya tavsiye edilen (2-4 cümle).' },
-      { ad: 'KAPANIŞ', aciklama: 'Umut veya temenni (1-2 cümle). Yoksa boş bırak.' },
+      { ad: 'açılış',    aciklama: 'Mektubun açılışı, kime yazıldığını hissettir (1-2 cümle). Sıcak ve samimi.' },
+      { ad: 'ana mesaj', aciklama: 'Ana mesaj — öğrenilen veya tavsiye edilen (2-4 cümle).' },
+      { ad: 'kapanış',   aciklama: 'Umut veya temenni (1-2 cümle). Yoksa boş bırak.' },
     ]),
     user: text,
   };
@@ -226,9 +226,9 @@ function buildMektupPrompt(text) {
 function buildKararPrompt(text) {
   return {
     system: buildSystem([
-      { ad: 'KARAR',     aciklama: 'Verilen karar — net ve kararlı (1-2 cümle).' },
-      { ad: 'GEREKÇELER', aciklama: '2-4 gerekçe — her gerekçe ayrı satırda.' },
-      { ad: 'YANSIMA',   aciklama: 'Kararın sonucu veya öğrenilen ders (1-2 cümle).' },
+      { ad: 'karar',     aciklama: 'Verilen karar — net ve kararlı (1-2 cümle).' },
+      { ad: 'gerekçeler', aciklama: '2-4 gerekçe — her gerekçe ayrı satırda.' },
+      { ad: 'yansıma',   aciklama: 'Kararın sonucu veya öğrenilen ders (1-2 cümle).' },
     ]),
     user: text,
   };
@@ -238,9 +238,9 @@ function buildKararPrompt(text) {
 function buildTavsiyePrompt(text) {
   return {
     system: buildSystem([
-      { ad: 'GİRİŞ',     aciklama: 'Tavsiyelerin bağlamı ve kime hitap ettiği (1-2 cümle).' },
-      { ad: 'TAVSİYELER', aciklama: 'Her tavsiye ayrı satırda — numarasız, düz cümle.' },
-      { ad: 'KAPANIŞ',   aciklama: 'Özet veya son mesaj (1-2 cümle).' },
+      { ad: 'giriş',     aciklama: 'Tavsiyelerin bağlamı ve kime hitap ettiği (1-2 cümle).' },
+      { ad: 'tavsiyeler', aciklama: 'Her tavsiye ayrı satırda — numarasız, düz cümle.' },
+      { ad: 'kapanış',   aciklama: 'Özet veya son mesaj (1-2 cümle).' },
     ]),
     user: text,
   };
