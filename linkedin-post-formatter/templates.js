@@ -35,9 +35,10 @@ function parseSentences(text) {
  */
 function cleanSection(text) {
   return text
-    .replace(/\*\*/g, '')                        // ** karakterlerini tamamen sil (LinkedIn markdown desteklemiyor)
-    .replace(/^[A-ZÇĞİÖŞÜ\s\d.]+[:\-]\s*/u, '') // BÜYÜK HARF ETİKET: kaldır
-    .replace(/^\d+\.\s+/, '')                    // "1. " başındaki numaraları kaldır
+    .replace(/\*\*/g, '')                               // ** karakterlerini tamamen sil
+    .replace(/^[A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜ \t]*\n+/u, '')   // BÜYÜK HARF ETİKET\n kaldır (HOOK\n, GELİŞME\n vb.)
+    .replace(/^[A-ZÇĞİÖŞÜ\s\d.]+[:\-]\s*/u, '')        // BÜYÜK HARF ETİKET: kaldır (HOOK:, GELİŞME: vb.)
+    .replace(/^\d+\.\s+/, '')                           // "1. " başındaki numaraları kaldır
     .trim();
 }
 
