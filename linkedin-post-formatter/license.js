@@ -165,7 +165,7 @@ const LicenseManager = (() => {
 
     return {
       success: false,
-      error:   'Geçersiz lisans. Test için: LINKEDIN-PRO-TEST-2024'
+      error:   'Geçersiz lisans anahtarı.'
     };
   }
 

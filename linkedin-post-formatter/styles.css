@@ -177,19 +177,16 @@ html, body {
 
 .template-scroll {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
-  overflow-x: auto;
+  gap: 5px;
   padding-bottom: 12px;
-  scrollbar-width: none;
 }
-.template-scroll::-webkit-scrollbar { display: none; }
 
 .tpl-chip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  flex-shrink: 0;
   padding: 4px 10px;
   border-radius: 20px;
   font-size: 12px;
@@ -292,19 +289,19 @@ html, body {
 
 .seg-btn {
   flex: 1;
-  padding: 5px 4px;
+  padding: 6px 4px;
   border-radius: var(--r-xs);
   font-size: 12px;
   font-weight: 500;
-  color: var(--text-3);
+  color: var(--text-4);
   background: transparent;
   border: none;
   transition: all 0.15s;
 }
-.seg-btn:hover { color: var(--text-2); }
+.seg-btn:hover { color: var(--text-2); background: var(--zinc-200); }
 .seg-btn.active {
-  background: var(--bg);
-  color: var(--text);
+  background: var(--brand);
+  color: #fff;
   box-shadow: var(--shadow-xs);
   font-weight: 600;
 }

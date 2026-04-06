@@ -544,32 +544,39 @@ const ALL_TEMPLATES = {
    HASHTAG ÖNERİLERİ (Premium)
    ============================================= */
 const HASHTAG_DB = {
-  kariyer:   ['#kariyer', '#kişiselgelişim', '#liderlik', '#iş', '#başarı', '#motivasyon'],
-  teknoloji: ['#teknoloji', '#yazılım', '#dijital', '#inovasyon', '#startup', '#ai'],
-  girişim:   ['#girişim', '#startup', '#entrepreneur', '#iş', '#büyüme'],
-  pazarlama: ['#pazarlama', '#dijitalpazarlama', '#sosyalmedya', '#içerik', '#marka'],
-  finans:    ['#finans', '#yatırım', '#ekonomi', '#para', '#borsa'],
-  eğitim:    ['#eğitim', '#öğrenme', '#kişiselgelişim', '#kitap', '#beceri'],
-  sağlık:    ['#sağlık', '#wellness', '#spor', '#zihinselSağlık', '#verimlilik'],
-  liderlik:  ['#liderlik', '#yönetim', '#ekip', '#kültür', '#strateji'],
-  genel:     ['#linkedin', '#kişiselgelişim', '#başarı', '#motivasyon', '#türkiye'],
+  kariyer:   ['#kariyer', '#kariyergelişimi', '#işhayatı', '#profesyonelgelişim', '#işarama', '#networkingipuçları', '#kişiselgelişim', '#başarı', '#çalışmahayatı', '#linkedin'],
+  teknoloji: ['#teknoloji', '#yazılım', '#yazılımgeliştirme', '#yapayZeka', '#ai', '#dijitaldönüşüm', '#inovasyon', '#teknolojitrendleri', '#sibergüvenlik', '#bulut'],
+  girişim:   ['#girişim', '#girişimcilik', '#startup', '#entrepreneur', '#inovasyon', '#kurucu', '#büyüme', '#yatırım', '#melek yatırım', '#scaleup'],
+  pazarlama: ['#pazarlama', '#dijitalpazarlama', '#içerikpazarlama', '#sosyalmedya', '#marka', '#büyümepazarlama', '#seo', '#reklamcılık', '#pazarlamastratejisi', '#b2b'],
+  finans:    ['#finans', '#finansalözgürlük', '#yatırım', '#ekonomi', '#borsa', '#bütçeyönetimi', '#kripto', '#kişiselfinans', '#servetyönetimi', '#emeklilik'],
+  eğitim:    ['#eğitim', '#öğrenme', '#sürekliöğrenme', '#kişiselgelişim', '#kitapönerisi', '#online eğitim', '#beceri', '#sertifika', '#mentorluk', '#kariyer'],
+  sağlık:    ['#sağlık', '#wellness', '#spor', '#zihinselSağlık', '#verimlilik', '#iş-yaşamdengesi', '#meditasyon', '#uyku', '#stresyönetimi', '#sağlıklıyaşam'],
+  liderlik:  ['#liderlik', '#yönetim', '#takımyönetimi', '#ekip', '#organizasyonkültürü', '#strateji', '#yönetimbiçimi', '#çalışanmutluluğu', '#performans', '#verimliliği'],
+  uzakçalışma: ['#uzakçalışma', '#remotework', '#hibridçalışma', '#dijitalgöçebe', '#evdençalışma', '#esnekçalışma', '#verimlilik', '#işhayatı', '#çalışmakültürü', '#homeoffice'],
+  genel:     ['#linkedin', '#kişiselgelişim', '#başarı', '#motivasyon', '#ilham', '#paylaşım', '#deneyim', '#türkiye', '#profesyonel'],
 };
 
 function suggestHashtags(text) {
   const t = text.toLowerCase();
-  let cat = 'genel';
-  if (t.match(/yazılım|kod|developer|javascript|python|ai|yapay/)) cat = 'teknoloji';
-  else if (t.match(/girişim|startup|şirket|kurucu|founder/))       cat = 'girişim';
-  else if (t.match(/pazarlama|marka|kampanya|reklam|içerik/))      cat = 'pazarlama';
-  else if (t.match(/para|yatırım|finans|borsa|ekonomi/))           cat = 'finans';
-  else if (t.match(/öğren|eğitim|kurs|sertifika|kitap/))           cat = 'eğitim';
-  else if (t.match(/spor|sağlık|fitness|koşu|meditasyon/))         cat = 'sağlık';
-  else if (t.match(/lider|yönet|takım|ekip|strateji/))             cat = 'liderlik';
-  else if (t.match(/kariyer|iş|çalış|mesleki|profesyonel/))        cat = 'kariyer';
+  let cats = [];
+  if (t.match(/yazılım|kod|developer|javascript|python|ai|yapay zeka|teknoloji/)) cats.push('teknoloji');
+  if (t.match(/girişim|startup|şirket|kurucu|founder/))                           cats.push('girişim');
+  if (t.match(/pazarlama|marka|kampanya|reklam|içerik|sosyal medya/))             cats.push('pazarlama');
+  if (t.match(/para|yatırım|finans|borsa|ekonomi|bütçe/))                         cats.push('finans');
+  if (t.match(/öğren|eğitim|kurs|sertifika|kitap|beceri/))                        cats.push('eğitim');
+  if (t.match(/spor|sağlık|fitness|koşu|meditasyon|wellness/))                    cats.push('sağlık');
+  if (t.match(/lider|yönet|takım|ekip|strateji|organizasyon/))                    cats.push('liderlik');
+  if (t.match(/kariyer|iş|çalış|mesleki|profesyonel|pozisyon|işe alım/))          cats.push('kariyer');
+  if (t.match(/remote|uzak|evden|hibrit|home office/))                             cats.push('uzakçalışma');
 
-  const base  = HASHTAG_DB[cat] || HASHTAG_DB.genel;
-  const extra = HASHTAG_DB.genel.filter(t => !base.includes(t)).slice(0, 3);
-  return [...base, ...extra].slice(0, 8);
+  if (!cats.length) cats = ['genel'];
+
+  // Ana kategoriden 6, ikinci kategoriden 2, genel'den 2 al
+  const primary = HASHTAG_DB[cats[0]] || HASHTAG_DB.genel;
+  const secondary = cats[1] ? HASHTAG_DB[cats[1]].slice(0, 2) : [];
+  const fallback = HASHTAG_DB.genel.filter(h => !primary.includes(h) && !secondary.includes(h)).slice(0, 2);
+
+  return [...primary.slice(0, 6), ...secondary, ...fallback].slice(0, 10);
 }
 
 /* =============================================
