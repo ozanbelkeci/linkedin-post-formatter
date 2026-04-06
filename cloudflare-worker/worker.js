@@ -333,7 +333,7 @@ async function callGroq(apiKey, systemMsg, userMsg, temperature = 0.3) {
   const result = data?.choices?.[0]?.message?.content;
   if (!result) throw new Error('Groq boş yanıt döndürdü.');
 
-  return result.trim();
+  return result.trim().replace(/\*\*/g, '');
 }
 
 class GroqError extends Error {

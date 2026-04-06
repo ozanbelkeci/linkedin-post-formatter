@@ -197,11 +197,11 @@ const TEMPLATE_LISTE = {
     const lines = parseLines(mainBlock);
     if (!lines.length) return '';
 
-    const title = endWithDot(lines[0]);
+    const title = endWithDot(cleanSection(lines[0]));
     const items  = lines.slice(1);
     let out = title + '\n\n';
     items.slice(0, 10).forEach((item, i) => {
-      out += `${nums[i] || '▶️'} ${endWithDot(item)}\n\n`;
+      out += `${nums[i] || '▶️'} ${endWithDot(stripBullet(item))}\n\n`;
     });
     if (conclusion) out += endWithDot(conclusion) + '\n\n';
     out += '―\n\n' + cta;
