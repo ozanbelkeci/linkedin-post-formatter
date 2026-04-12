@@ -22,8 +22,8 @@ id      = "1f949b64209d44e6a31fcef0ac2abb43"
 # preview_id  = "BURAYA_PREVIEW_KV_ID_YAZAR"
 
 # ── Environment Variables ─────────────────────
-# GEMINI_API_KEY'i secret olarak ekle (toml'a yazma!):
-#   wrangler secret put GEMINI_API_KEY
+# GROQ_API_KEY'i secret olarak ekle (toml'a yazma!):
+#   wrangler secret put GROQ_API_KEY
 # Çalıştır, sonra API key'i yapıştır.
 
 # ── Deployment ────────────────────────────────

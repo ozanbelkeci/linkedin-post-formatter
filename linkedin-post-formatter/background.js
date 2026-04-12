@@ -23,23 +23,33 @@ chrome.runtime.onInstalled.addListener(({ reason }) => {
   }
 });
 
-// Kullanım sayacını güncelle (popup her açıldığında)
+function todayStr() {
+  const d = new Date();
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
+}
+
+// Kullanım sayacını güncelle
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'INCREMENT_USAGE') {
-    chrome.storage.local.get('usageCount', (data) => {
-      const newCount = (data.usageCount || 0) + 1;
-      chrome.storage.local.set({ usageCount: newCount });
-      sendResponse({ usageCount: newCount });
+    chrome.storage.local.get(['usageCount', 'dailyUsage', 'usageDate'], (data) => {
+      const today    = todayStr();
+      const newTotal = (data.usageCount || 0) + 1;
+      const daily    = data.usageDate === today ? (data.dailyUsage || 0) + 1 : 1;
+      chrome.storage.local.set({ usageCount: newTotal, dailyUsage: daily, usageDate: today });
+      sendResponse({ usageCount: newTotal, dailyUsage: daily });
     });
-    return true; // async response için
+    return true;
   }
 
   if (message.type === 'GET_STATUS') {
-    chrome.storage.local.get(['usageCount', 'licenseValid', 'licenseKey'], (data) => {
+    chrome.storage.local.get(['usageCount', 'dailyUsage', 'usageDate', 'licenseValid', 'licenseKey'], (data) => {
+      const today = todayStr();
+      const daily = data.usageDate === today ? (data.dailyUsage || 0) : 0;
       sendResponse({
-        usageCount:   data.usageCount || 0,
-        isPremium:    data.licenseValid === true,
-        hasLicense:   !!data.licenseKey
+        usageCount: data.usageCount || 0,
+        count:      daily,
+        isPremium:  data.licenseValid === true,
+        hasLicense: !!data.licenseKey
       });
     });
     return true;

@@ -143,13 +143,10 @@ const LicenseManager = (() => {
 
   /* ------------------------------------------
      Test Modu (Gumroad ID ayarlanmamışsa)
-     Demo anahtarı: LINKEDIN-PRO-TEST-2024
      ------------------------------------------ */
   async function verifyTestMode(licenseKey) {
     const DEMO_KEYS = [
       'LINKEDIN-PRO-TEST-2024',
-      'TEST-PREMIUM-KEY',
-      'DEMO-1234-5678-9012'
     ];
 
     await new Promise(r => setTimeout(r, 800)); // API gecikmesi simülasyonu
@@ -219,13 +216,27 @@ const LicenseManager = (() => {
   }
 
   /* ------------------------------------------
+     Feature Access Kontrolü
+     ------------------------------------------ */
+  const PREMIUM_FEATURES = ['ab-test', 'analyze', 'tone', 'hashtag-score', 'unlimited-format', 'unlimited-drafts'];
+
+  async function checkFeatureAccess(feature) {
+    const premium = await isPremium();
+    if (PREMIUM_FEATURES.includes(feature) && !premium) {
+      return false;
+    }
+    return true;
+  }
+
+  /* ------------------------------------------
      Public API
      ------------------------------------------ */
   return {
     isPremium,
     verify,
     deactivate,
-    getLicenseInfo
+    getLicenseInfo,
+    checkFeatureAccess,
   };
 
 })();

@@ -34,11 +34,20 @@ function parseSentences(text) {
  * **HOOK**, GELİŞME:, 1. BÖLÜM: gibi kalıpları kaldırır.
  */
 function cleanSection(text) {
+  // Known mixed-case section label words to strip (Turkish + English)
+  const knownLabels = [
+    'Giriş', 'Kapanış', 'Açılış', 'Gelişme', 'Sonuç', 'Özet', 'Ders', 'Hook',
+    'Opening', 'Closing', 'Context', 'Intro', 'Introduction', 'Conclusion',
+    'Background', 'Summary', 'Lesson',
+  ].join('|');
+  const knownLabelRe = new RegExp(`^(${knownLabels})[:\\s]*\\n*`, 'u');
+
   return text
     .trim()                                                   // önce trim — split sonrası baştaki \n'i temizle
     .replace(/\*\*/g, '')                                     // ** kaldır
-    .replace(/^[A-ZÇĞİÖŞÜ\d][A-ZÇĞİÖŞÜ\d :\t]*\n+/u, '')   // BÜYÜK HARF ETİKET satırı kaldır (HOOK\n, BÖLÜM 2: GELİŞME\n vb.)
+    .replace(/^[A-ZÇĞİÖŞÜ\d][A-ZÇĞİÖŞÜ\d :\t]*\n+/u, '')   // BÜYÜK HARF ETİKET satırı kaldır (HOOK\n, BÖLÜM 2\n vb.)
     .replace(/^[A-ZÇĞİÖŞÜ\s\d.]+[:\-]\s*/u, '')              // BÜYÜK HARF ETİKET: kaldır (aynı satırda devam ediyorsa)
+    .replace(knownLabelRe, '')                                // Giriş\n, Kapanış: vb. mixed-case etiketler
     .replace(/^\d+\.\s+/, '')                                 // "1. " başındaki numaraları kaldır
     .trim();
 }
@@ -50,7 +59,9 @@ function cleanSection(text) {
  */
 function parseSections(text, expected = 3) {
   if (!text || !text.trim()) return Array(expected).fill('');
-  const sections = text.split('|||').map(s => cleanSection(s));
+  // Strip leading/trailing separators and normalize 2+ pipes to |||
+  const normalized = text.replace(/\|{2,}/g, '|||').replace(/^\|+\s*/, '').replace(/\s*\|+$/, '');
+  const sections = normalized.split('|||').map(s => cleanSection(s));
   // ||| yoksa: tüm metin birinci bölüm, geri kalanlar boş
   if (sections.length === 1 && expected > 1) {
     const result = [sections[0]];
@@ -68,69 +79,84 @@ function endWithDot(s) {
   return /[.!?]$/.test(s.trim()) ? s.trim() : s.trim() + '.';
 }
 
-/* =============================================
-   TEMPLATE CTA MAP
-   Her şablonun kendine özgü kapanış sorusu vardır.
-   ============================================= */
-const TEMPLATE_CTAS = {
-  hikaye:        (ton) => ton === 'samimi'
-    ? 'Siz de böyle bir dönüm noktası yaşadınız mı? Anlatın. 😊'
-    : 'Siz de böyle bir dönüm noktası yaşadınız mı? Yorumlarda paylaşın. 👇',
+/**
+ * AI'dan gelen CTA metnine uygun emoji ekler.
+ * CTA boşsa boş string döner (format fonksiyonları fallback uygular).
+ */
+function formatCTA(aiCta, ton) {
+  if (!aiCta || !aiCta.trim()) return '';
+  const emoji = ton === 'samimi' ? ' 😊' : ' 👇';
+  return aiCta.trim() + emoji;
+}
 
-  liste:         (ton) => ton === 'samimi'
-    ? 'Listeye eklemek istediğiniz bir şey var mı? 😊'
-    : 'Listeye eklemek istediğiniz bir şey var mı? 💬',
+/**
+ * Metindeki dili tespit eder.
+ * Türkçe, Almanca, Fransızca, İspanyolca veya İngilizce döner.
+ */
+function detectLanguage(text) {
+  const len = text.replace(/\s/g, '').length || 1;
 
-  fikir:         (ton) => ton === 'samimi'
-    ? 'Katılıyor musunuz? Farklı düşünenler varsa görmek isterim. 😊'
-    : 'Katılıyor musunuz? Farklı düşünenler varsa görmek isterim. 👇',
+  const trChars = (text.match(/[ğşıçöüĞŞİÇÖÜ]/g) || []).length;
+  const trWords = (text.match(/\b(ve|bir|bu|için|ile|ben|sen|biz|ama|da|de|ki|değil|olan|gibi|daha|çok)\b/gi) || []).length;
+  if (trChars / len > 0.015 || trWords >= 3) return 'tr';
 
-  vaka:          (ton) => ton === 'samimi'
-    ? 'Benzer bir dönüşüm hikayeniz var mı? 😊'
-    : 'Benzer bir dönüşüm hikayeniz var mı? 👇',
+  const deChars = (text.match(/[äöüßÄÖÜ]/g) || []).length;
+  const deWords = (text.match(/\b(und|der|die|das|ist|ich|sie|wir|mit|von|für|auf|nicht|auch|ein|eine|zu|haben|werden|ist|sind)\b/gi) || []).length;
+  if (deChars / len > 0.008 || deWords >= 4) return 'de';
 
-  ipucu:         (ton) => ton === 'samimi'
-    ? 'Uyguladınız mı? Sonucu yorumlarda paylaşın. 😊'
-    : 'Uyguladınız mı? Sonucu yorumlarda paylaşın. 👇',
+  const frChars = (text.match(/[éèêëàâîïôûùœæÉÈÊËÀÂÎÏÔÛÙŒÆ]/g) || []).length;
+  const frWords = (text.match(/\b(et|le|la|les|un|une|des|du|au|avec|dans|est|il|elle|nous|vous|ils|que|qui|ce|se|pas)\b/gi) || []).length;
+  if (frChars / len > 0.008 || frWords >= 4) return 'fr';
 
-  soru:          ()    => 'Sizin cevabınız ne? 👇',
+  const esChars = (text.match(/[ñÑ¿¡]/g) || []).length;
+  const esWords = (text.match(/\b(y|el|la|los|las|un|una|en|de|que|por|con|para|su|es|son|del|lo|se|al)\b/gi) || []).length;
+  if (esChars >= 1 || esWords >= 5) return 'es';
 
-  istatistik:    (ton) => ton === 'samimi'
-    ? 'Bu veri sizi şaşırttı mı? 😊'
-    : 'Bu veri sizi şaşırttı mı? 👇',
+  return 'en';
+}
 
-  basari:        (ton) => ton === 'samimi'
-    ? 'Siz de bu yolda ne yaşadınız? 😊'
-    : 'Siz de bu yolda ne yaşadınız? 👇',
-
-  hata:          (ton) => ton === 'samimi'
-    ? 'Siz de benzer bir hata yaptınız mı? 😊'
-    : 'Siz de benzer bir hata yaptınız mı? 👇',
-
-  karsilastirma: (ton) => ton === 'samimi'
-    ? 'Hangi yaklaşımı tercih edersiniz? 😊'
-    : 'Hangi yaklaşımı tercih edersiniz? 👇',
-
-  manifesto:     (ton) => ton === 'samimi'
-    ? 'Bu ilkelerden hangisi size en çok dokundu? 😊'
-    : 'Bu ilkelerden hangisi size en çok dokundu? 👇',
-
-  mektup:        (ton) => ton === 'samimi'
-    ? 'Geçmişteki kendinize ne söylerdiniz? 😊'
-    : 'Geçmişteki kendinize ne söylerdiniz? 👇',
-
-  karar:         (ton) => ton === 'samimi'
-    ? 'Siz de böyle zor bir karar verdiniz mi? 😊'
-    : 'Siz de böyle zor bir karar verdiniz mi? 👇',
-
-  tavsiye:       (ton) => ton === 'samimi'
-    ? 'Eklemek istediğiniz bir tavsiye var mı? 😊'
-    : 'Eklemek istediğiniz bir tavsiye var mı? 👇',
+/**
+ * Şablona ve dile özgü kapanış soruları.
+ */
+const CTA_TEXTS = {
+  hikaye:        { en: 'Have you had a similar turning point?',           tr: 'Benzer bir dönüm noktanız oldu mu?',              fr: 'Avez-vous vécu un tournant similaire ?',                   de: 'Haben Sie einen ähnlichen Wendepunkt erlebt?',              es: '¿Has vivido un punto de inflexión similar?' },
+  liste:         { en: 'Anything you would add to this list?',            tr: 'Bu listeye ekleyeceğiniz bir şey var mı?',         fr: 'Qu\'ajouteriez-vous à cette liste ?',                      de: 'Was würden Sie dieser Liste hinzufügen?',                   es: '¿Añadirías algo a esta lista?' },
+  fikir:         { en: 'Do you agree? Different perspectives welcome.',   tr: 'Katılıyor musunuz? Farklı görüşler bekliyorum.',   fr: 'Êtes-vous d\'accord ? Les avis contraires sont bienvenus.', de: 'Stimmen Sie zu? Andere Perspektiven sind willkommen.',      es: '¿Estás de acuerdo? Diferentes perspectivas son bienvenidas.' },
+  vaka:          { en: 'Have you seen a similar transformation?',         tr: 'Siz de benzer bir dönüşüm yaşadınız mı?',          fr: 'Avez-vous vécu une transformation similaire ?',            de: 'Haben Sie eine ähnliche Transformation erlebt?',            es: '¿Has visto una transformación similar?' },
+  ipucu:         { en: 'Have you tried this? Share your results.',        tr: 'Bunu denediniz mi? Sonuçlarınızı paylaşın.',       fr: 'L\'avez-vous essayé ? Partagez vos résultats.',            de: 'Haben Sie das ausprobiert? Teilen Sie Ihre Ergebnisse.',   es: '¿Lo has probado? Comparte tus resultados.' },
+  soru:          { en: 'What\'s your answer?',                            tr: 'Sizin cevabınız nedir?',                           fr: 'Quelle est votre réponse ?',                               de: 'Was ist Ihre Antwort?',                                     es: '¿Cuál es tu respuesta?' },
+  istatistik:    { en: 'Did this data surprise you?',                     tr: 'Bu veri sizi şaşırttı mı?',                        fr: 'Ces données vous ont-elles surpris ?',                     de: 'Hat Sie diese Zahl überrascht?',                            es: '¿Te sorprendieron estos datos?' },
+  basari:        { en: 'What has made the difference on your journey?',   tr: 'Yolculuğunuzda farkı yaratan ne oldu?',            fr: 'Qu\'est-ce qui a fait la différence dans votre parcours ?', de: 'Was hat auf Ihrem Weg den Unterschied gemacht?',           es: '¿Qué ha marcado la diferencia en tu trayectoria?' },
+  hata:          { en: 'Have you made a similar mistake?',                tr: 'Siz de benzer bir hata yaptınız mı?',              fr: 'Avez-vous fait une erreur similaire ?',                    de: 'Haben Sie einen ähnlichen Fehler gemacht?',                 es: '¿Has cometido un error similar?' },
+  karsilastirma: { en: 'Which approach do you prefer and why?',           tr: 'Hangi yaklaşımı tercih edersiniz ve neden?',       fr: 'Quelle approche préférez-vous et pourquoi ?',             de: 'Welchen Ansatz bevorzugen Sie und warum?',                  es: '¿Qué enfoque prefieres y por qué?' },
+  manifesto:     { en: 'Which of these principles resonates most with you?', tr: 'Bu ilkelerden hangisi size en çok hitap ediyor?', fr: 'Lequel de ces principes vous parle le plus ?',          de: 'Welches dieser Prinzipien spricht Sie am meisten an?',      es: '¿Cuál de estos principios te resuena más?' },
+  mektup:        { en: 'What would you tell your past self?',             tr: 'Geçmişteki kendinize ne söylerdiniz?',             fr: 'Que diriez-vous à votre ancien moi ?',                    de: 'Was würden Sie Ihrem früheren Ich sagen?',                  es: '¿Qué le dirías a tu yo del pasado?' },
+  karar:         { en: 'Have you ever faced a similarly tough decision?', tr: 'Siz de benzer zor bir kararla karşılaştınız mı?', fr: 'Avez-vous déjà pris une décision aussi difficile ?',      de: 'Haben Sie jemals eine ähnlich schwere Entscheidung getroffen?', es: '¿Has tomado alguna vez una decisión igual de difícil?' },
+  tavsiye:       { en: 'What advice would you add?',                      tr: 'Siz hangi tavsiyeyi eklerdiniz?',                  fr: 'Quel conseil ajouteriez-vous ?',                          de: 'Welchen Ratschlag würden Sie hinzufügen?',                  es: '¿Qué consejo añadirías?' },
 };
 
-function templateCTA(templateId, ton) {
-  const fn = TEMPLATE_CTAS[templateId];
-  return fn ? fn(ton) : 'Düşüncelerinizi yorumlarda paylaşın. 👇';
+/**
+ * Şablon ID ve UI diline göre kapanış sorusu döner.
+ */
+function templateCTA(id, lang) {
+  const texts = CTA_TEXTS[id] || CTA_TEXTS.hikaye;
+  return (texts[lang] || texts.en) + ' 👇';
+}
+
+/**
+ * Şablon içindeki yapısal etiketleri dile göre döndürür.
+ */
+const LABELS = {
+  why_it_works:       { en: 'Why it works:',           tr: 'Neden işe yarar:',         de: 'Warum es funktioniert:',      fr: 'Pourquoi ça marche :',       es: '¿Por qué funciona?' },
+  how_to_apply:       { en: 'How to apply it:',         tr: 'Nasıl uygulanır:',          de: 'So setzen Sie es um:',        fr: 'Comment l\'appliquer :',     es: 'Cómo aplicarlo:' },
+  what_made_possible: { en: 'What made it possible:',   tr: 'Bunu mümkün kılan:',        de: 'Was es möglich gemacht hat:', fr: 'Ce qui l\'a rendu possible :', es: 'Lo que lo hizo posible:' },
+  lesson:             { en: '💡 Lesson:',               tr: '💡 Ders:',                  de: '💡 Lektion:',                 fr: '💡 Leçon :',                 es: '💡 Lección:' },
+  before:             { en: '❌ Before:',                tr: '❌ Önce:',                  de: '❌ Vorher:',                  fr: '❌ Avant :',                 es: '❌ Antes:' },
+  after:              { en: '✅ After:',                 tr: '✅ Sonra:',                 de: '✅ Nachher:',                 fr: '✅ Après :',                 es: '✅ Después:' },
+};
+function lbl(text, key) {
+  const lang = detectLanguage(text);
+  return (LABELS[key] || {})[lang] || LABELS[key].en;
 }
 
 /* =============================================
@@ -146,10 +172,10 @@ const TEMPLATE_HIKAYE = {
   name: '📖 Story',
   premium: false,
   description: 'Kişisel deneyim anlatısı',
-  placeholder: 'Deneyiminizi yazın. Ne oldu, nasıl hissettiniz, ne öğrendiniz?',
-  format(text, ton) {
-    const [hook, gelisme, ders] = parseSections(text, 3);
-    const cta = templateCTA('hikaye', ton);
+  placeholder: 'Write about your experience. What happened, how you felt, what you learned.',
+  format(text, ton, lang = 'en') {
+    const [hook, gelisme, ders, aiCta] = parseSections(text, 4);
+    const cta = formatCTA(aiCta, ton) || templateCTA(this.id, lang);
 
     let out = '';
     if (hook)    out += endWithDot(hook) + '\n\n';
@@ -169,14 +195,14 @@ const TEMPLATE_LISTE = {
   name: '📋 Liste',
   premium: false,
   description: 'Madde madde ipucu / özet listesi',
-  placeholder: 'İlk satır başlık olacak. Diğer satırlar madde madde sıralanacak.',
-  format(text, ton) {
-    const cta  = templateCTA('liste', ton);
+  placeholder: 'First line will be the title. Other lines will become numbered list items.',
+  format(text, ton, lang = 'en') {
     const nums = ['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
 
     // Yeni ||| formatı mı, eski \n---\n formatı mı?
     if (text.includes('|||')) {
-      const [baslik, maddeler, sonuc] = parseSections(text, 3);
+      const [baslik, maddeler, sonuc, aiCta] = parseSections(text, 4);
+      const cta = formatCTA(aiCta, ton) || templateCTA(this.id, lang);
       let out = '';
       if (baslik) out += endWithDot(baslik) + '\n\n';
 
@@ -206,7 +232,7 @@ const TEMPLATE_LISTE = {
       out += `${nums[i] || '▶️'} ${endWithDot(stripBullet(item))}\n\n`;
     });
     if (conclusion) out += endWithDot(conclusion) + '\n\n';
-    out += '―\n\n' + cta;
+    out += '―\n\n' + templateCTA(this.id, lang);
     return out.trim();
   }
 };
@@ -220,10 +246,10 @@ const TEMPLATE_FIKIR = {
   name: '💡 Opinion',
   premium: false,
   description: 'Kısa ve güçlü görüş paylaşımı',
-  placeholder: 'Görüşünüzü yazın. Tek bir konuya odaklanın.',
-  format(text, ton) {
-    const [iddia, gerekce, meydan] = parseSections(text, 3);
-    const cta = templateCTA('fikir', ton);
+  placeholder: 'Write your opinion. Focus on a single strong point.',
+  format(text, ton, lang = 'en') {
+    const [iddia, gerekce, meydan, aiCta] = parseSections(text, 4);
+    const cta = formatCTA(aiCta, ton) || templateCTA(this.id, lang);
 
     let out = '';
     if (iddia)   out += endWithDot(iddia) + '\n\n';
@@ -247,15 +273,15 @@ const TEMPLATE_VAKA = {
   name: '🔬 Case Study',
   premium: true,
   description: 'Vaka çalışması / before-after analizi',
-  placeholder: 'Genel durumu, önce ve sonrasını, çıkarımınızı yazın.',
-  format(text, ton) {
-    const [genel, once, sonra, cikarim] = parseSections(text, 4);
-    const cta = templateCTA('vaka', ton);
+  placeholder: 'Write the context, the before/after situation, and your key takeaway.',
+  format(text, ton, lang = 'en') {
+    const [genel, once, sonra, cikarim, aiCta] = parseSections(text, 5);
+    const cta = formatCTA(aiCta, ton) || templateCTA(this.id, lang);
 
     let out = '';
     if (genel)   out += endWithDot(genel) + '\n\n';
-    if (once)    out += `❌ Önce: ${endWithDot(once)}\n\n`;
-    if (sonra)   out += `✅ Sonra: ${endWithDot(sonra)}\n\n`;
+    if (once)    out += `${lbl(text, 'before')} ${endWithDot(once)}\n\n`;
+    if (sonra)   out += `${lbl(text, 'after')} ${endWithDot(sonra)}\n\n`;
     if (cikarim) out += `💡 ${endWithDot(cikarim)}\n\n`;
     out += '―\n\n' + cta;
     return out.trim();
@@ -271,18 +297,18 @@ const TEMPLATE_IPUCU = {
   name: '🎯 Quick Tip',
   premium: true,
   description: 'Tek bir güçlü ipucu odaklı post',
-  placeholder: 'İpucunuzu yazın. Neden işe yaradığını ve nasıl uygulandığını ekleyin.',
-  format(text, ton) {
-    const [baslik, neden, nasil] = parseSections(text, 3);
-    const cta = templateCTA('ipucu', ton);
+  placeholder: 'Write your tip. Include why it works and how to apply it.',
+  format(text, ton, lang = 'en') {
+    const [baslik, neden, nasil, aiCta] = parseSections(text, 4);
+    const cta = formatCTA(aiCta, ton) || templateCTA(this.id, lang);
 
     let out = '';
     if (baslik) out += `🎯 ${endWithDot(baslik)}\n\n`;
-    if (neden)  out += `Neden işe yarıyor: ${endWithDot(neden)}\n\n`;
+    if (neden)  out += `${lbl(text, 'why_it_works')} ${endWithDot(neden)}\n\n`;
     if (nasil) {
       const steps = nasil.split('\n').map(l => stripBullet(l)).filter(Boolean);
       if (steps.length > 1) {
-        out += 'Nasıl yapılır:\n\n';
+        out += lbl(text, 'how_to_apply') + '\n\n';
         steps.forEach(s => { out += `→ ${endWithDot(s)}\n`; });
         out += '\n';
       } else {
@@ -303,10 +329,10 @@ const TEMPLATE_SORU = {
   name: '❓ Question',
   premium: true,
   description: 'Etkileşim yaratan soru formatı',
-  placeholder: 'Sormak istediğiniz soruyu ve arka planı yazın.',
-  format(text, ton) {
-    const [baglam, soru, ilginc] = parseSections(text, 3);
-    const cta = templateCTA('soru', ton);
+  placeholder: 'Write the question you want to ask and its background context.',
+  format(text, ton, lang = 'en') {
+    const [baglam, soru, ilginc, aiCta] = parseSections(text, 4);
+    const cta = formatCTA(aiCta, ton) || templateCTA(this.id, lang);
 
     let out = '';
     if (baglam) out += endWithDot(baglam) + '\n\n';
@@ -326,10 +352,10 @@ const TEMPLATE_ISTATISTIK = {
   name: '📊 Data',
   premium: true,
   description: 'Veri ve istatistik odaklı post',
-  placeholder: 'Çarpıcı veriniizi ve yorumunuzu yazın.',
-  format(text, ton) {
-    const [veri, anlam, cikarim] = parseSections(text, 3);
-    const cta = templateCTA('istatistik', ton);
+  placeholder: 'Write your striking statistic or data point and your interpretation.',
+  format(text, ton, lang = 'en') {
+    const [veri, anlam, cikarim, aiCta] = parseSections(text, 4);
+    const cta = formatCTA(aiCta, ton) || templateCTA(this.id, lang);
 
     let out = '';
     if (veri)    out += `📊 "${endWithDot(veri)}"\n\n`;
@@ -349,17 +375,17 @@ const TEMPLATE_BASARI = {
   name: '🏆 Win',
   premium: true,
   description: 'Alçakgönüllü başarı paylaşımı',
-  placeholder: 'Başarınızı, bunu mümkün kılan faktörleri ve yansımanızı yazın.',
-  format(text, ton) {
-    const [basari, faktorler, yansima] = parseSections(text, 3);
-    const cta   = templateCTA('basari', ton);
+  placeholder: 'Write your achievement, the factors that made it possible, and your reflection.',
+  format(text, ton, lang = 'en') {
+    const [basari, faktorler, yansima, aiCta] = parseSections(text, 4);
+    const cta = formatCTA(aiCta, ton) || templateCTA(this.id, lang);
     const icons = ['💪','🧠','🤝','🔑','⚡'];
 
     let out = '';
     if (basari) out += endWithDot(basari) + '\n\n';
     if (faktorler) {
       const items = faktorler.split('\n').map(l => stripBullet(l)).filter(Boolean);
-      out += 'Bunu mümkün kılanlar:\n\n';
+      out += lbl(text, 'what_made_possible') + '\n\n';
       items.slice(0, 5).forEach((item, i) => {
         out += `${icons[i] || '▶️'} ${endWithDot(item)}\n\n`;
       });
@@ -379,15 +405,15 @@ const TEMPLATE_HATA = {
   name: '❌ Lesson',
   premium: true,
   description: 'Yapılan hatayı ve öğrenilen dersi anlat',
-  placeholder: 'Hatanızı, ne yanlış gittiğini ve öğrendiklerinizi yazın.',
-  format(text, ton) {
-    const [hata, ne_yanlis, ders] = parseSections(text, 3);
-    const cta = templateCTA('hata', ton);
+  placeholder: 'Write your mistake, what went wrong, and what you learned from it.',
+  format(text, ton, lang = 'en') {
+    const [hata, ne_yanlis, ders, aiCta] = parseSections(text, 4);
+    const cta = formatCTA(aiCta, ton) || templateCTA(this.id, lang);
 
     let out = '';
     if (hata)      out += endWithDot(hata) + '\n\n';
     if (ne_yanlis) out += ne_yanlis.split('\n').filter(Boolean).map(l => endWithDot(stripBullet(l))).join('\n\n') + '\n\n';
-    if (ders)      out += `💡 Ders: ${endWithDot(ders)}\n\n`;
+    if (ders)      out += `${lbl(text, 'lesson')} ${endWithDot(ders)}\n\n`;
     out += '―\n\n' + cta;
     return out.trim();
   }
@@ -402,10 +428,10 @@ const TEMPLATE_KARSILASTIRMA = {
   name: '⚖️ Versus',
   premium: true,
   description: 'İki yaklaşımı karşılaştırma',
-  placeholder: 'Konuyu, eski/kötü yolu, yeni/iyi yolu ve temel farkı yazın.',
-  format(text, ton) {
-    const [konu, eski, yeni, fark] = parseSections(text, 4);
-    const cta = templateCTA('karsilastirma', ton);
+  placeholder: 'Write the topic, the old/bad way, the new/better way, and the key difference.',
+  format(text, ton, lang = 'en') {
+    const [konu, eski, yeni, fark, aiCta] = parseSections(text, 5);
+    const cta = formatCTA(aiCta, ton) || templateCTA(this.id, lang);
 
     let out = '';
     if (konu) out += endWithDot(konu) + '\n\n';
@@ -426,10 +452,10 @@ const TEMPLATE_MANIFESTO = {
   name: '📣 Manifesto',
   premium: true,
   description: 'Güçlü inanç ve değer bildirisi',
-  placeholder: 'İnançlarınızı ve değerlerinizi yazın.',
-  format(text, ton) {
-    const [giris, ilkeler, kapanis] = parseSections(text, 3);
-    const cta = templateCTA('manifesto', ton);
+  placeholder: 'Write your core beliefs and values.',
+  format(text, ton, lang = 'en') {
+    const [giris, ilkeler, kapanis, aiCta] = parseSections(text, 4);
+    const cta = formatCTA(aiCta, ton) || templateCTA(this.id, lang);
 
     let out = '';
     if (giris) out += endWithDot(giris) + '\n\n';
@@ -452,17 +478,16 @@ const TEMPLATE_MEKTUP = {
   name: '✉️ Letter',
   premium: true,
   description: 'Geçmişteki kendinize mektup formatı',
-  placeholder: 'Geçmişteki veya gelecekteki kendinize ne söylemek istediğinizi yazın.',
-  format(text, ton) {
-    const [para1, para2, para3] = parseSections(text, 3);
-    const cta  = templateCTA('mektup', ton);
-    const year = new Date().getFullYear() - 5;
+  placeholder: 'Write what you want to say to your past or future self.',
+  format(text, ton, lang = 'en') {
+    const [para1, para2, para3, aiCta] = parseSections(text, 4);
+    const cta = formatCTA(aiCta, ton) || templateCTA(this.id, lang);
 
-    let out = `Sevgili ${year} yılının beni,\n\n`;
+    let out = '';
     if (para1) out += endWithDot(para1) + '\n\n';
     if (para2) out += endWithDot(para2) + '\n\n';
     if (para3) out += endWithDot(para3) + '\n\n';
-    out += 'Şimdiki sen.\n\n―\n\n' + cta;
+    out += '―\n\n' + cta;
     return out.trim();
   }
 };
@@ -476,10 +501,10 @@ const TEMPLATE_KARAR = {
   name: '🧭 Decision',
   premium: true,
   description: 'Zor bir kararı ve sürecini anlat',
-  placeholder: 'Kararı, gerekçelerinizi ve sonucu yazın.',
-  format(text, ton) {
-    const [karar, gerekceler, yansima] = parseSections(text, 3);
-    const cta = templateCTA('karar', ton);
+  placeholder: 'Write the decision, your reasons, and the outcome.',
+  format(text, ton, lang = 'en') {
+    const [karar, gerekceler, yansima, aiCta] = parseSections(text, 4);
+    const cta = formatCTA(aiCta, ton) || templateCTA(this.id, lang);
 
     let out = '';
     if (karar) out += endWithDot(karar) + '\n\n';
@@ -503,10 +528,10 @@ const TEMPLATE_TAVSIYE = {
   name: '🤝 Advice',
   premium: true,
   description: 'Sektöre yeni girenlere tavsiye',
-  placeholder: 'Tavsiyelerinizi ve bunları kime verdiğinizi yazın.',
-  format(text, ton) {
-    const [giris, tavsiyeler, kapanis] = parseSections(text, 3);
-    const cta = templateCTA('tavsiye', ton);
+  placeholder: 'Write your advice and who it is meant for.',
+  format(text, ton, lang = 'en') {
+    const [giris, tavsiyeler, kapanis, aiCta] = parseSections(text, 4);
+    const cta = formatCTA(aiCta, ton) || templateCTA(this.id, lang);
 
     let out = '';
     if (giris) out += endWithDot(giris) + '\n\n';
@@ -556,27 +581,57 @@ const HASHTAG_DB = {
   genel:     ['#linkedin', '#kişiselgelişim', '#başarı', '#motivasyon', '#ilham', '#paylaşım', '#deneyim', '#türkiye', '#profesyonel'],
 };
 
+const HASHTAG_DB_EN = {
+  career:     ['#career', '#careerdevelopment', '#jobsearch', '#hiring', '#networking', '#professionaldevelopment', '#leadership', '#success', '#careeradvice', '#linkedin'],
+  technology: ['#technology', '#software', '#ai', '#artificialintelligence', '#innovation', '#tech', '#programming', '#digitaltransformation', '#cybersecurity', '#cloud'],
+  startup:    ['#startup', '#entrepreneurship', '#founder', '#innovation', '#business', '#smallbusiness', '#growth', '#fundraising', '#entrepreneur', '#scaleup'],
+  marketing:  ['#marketing', '#digitalmarketing', '#contentmarketing', '#socialmedia', '#branding', '#growthhacking', '#seo', '#b2b', '#marketingstrategy', '#advertising'],
+  finance:    ['#finance', '#investing', '#personalfinance', '#money', '#economy', '#fintech', '#wealth', '#stocks', '#budgeting', '#financialfreedom'],
+  education:  ['#education', '#learning', '#onlinelearning', '#personaldevelopment', '#books', '#skills', '#certification', '#mentorship', '#selfimprovement', '#growth'],
+  health:     ['#health', '#wellness', '#fitness', '#mentalhealth', '#productivity', '#worklifebalance', '#mindfulness', '#exercise', '#wellbeing', '#selfcare'],
+  leadership: ['#leadership', '#management', '#teambuilding', '#culture', '#strategy', '#teamwork', '#execution', '#ceo', '#organizationalculture', '#performance'],
+  remote:     ['#remotework', '#remotejobs', '#workfromhome', '#digitalnomad', '#hybrid', '#flexibility', '#futureofwork', '#wfh', '#homeoffice', '#productivity'],
+  general:    ['#linkedin', '#personaldevelopment', '#success', '#motivation', '#inspiration', '#mindset', '#growth', '#professional', '#career', '#goals'],
+};
+
 function suggestHashtags(text) {
+  const lang = detectLanguage(text);
   const t = text.toLowerCase();
   let cats = [];
-  if (t.match(/yazılım|kod|developer|javascript|python|ai|yapay zeka|teknoloji/)) cats.push('teknoloji');
-  if (t.match(/girişim|startup|şirket|kurucu|founder/))                           cats.push('girişim');
-  if (t.match(/pazarlama|marka|kampanya|reklam|içerik|sosyal medya/))             cats.push('pazarlama');
-  if (t.match(/para|yatırım|finans|borsa|ekonomi|bütçe/))                         cats.push('finans');
-  if (t.match(/öğren|eğitim|kurs|sertifika|kitap|beceri/))                        cats.push('eğitim');
-  if (t.match(/spor|sağlık|fitness|koşu|meditasyon|wellness/))                    cats.push('sağlık');
-  if (t.match(/lider|yönet|takım|ekip|strateji|organizasyon/))                    cats.push('liderlik');
-  if (t.match(/kariyer|iş|çalış|mesleki|profesyonel|pozisyon|işe alım/))          cats.push('kariyer');
-  if (t.match(/remote|uzak|evden|hibrit|home office/))                             cats.push('uzakçalışma');
 
-  if (!cats.length) cats = ['genel'];
-
-  // Ana kategoriden 6, ikinci kategoriden 2, genel'den 2 al
-  const primary = HASHTAG_DB[cats[0]] || HASHTAG_DB.genel;
-  const secondary = cats[1] ? HASHTAG_DB[cats[1]].slice(0, 2) : [];
-  const fallback = HASHTAG_DB.genel.filter(h => !primary.includes(h) && !secondary.includes(h)).slice(0, 2);
-
-  return [...primary.slice(0, 6), ...secondary, ...fallback].slice(0, 10);
+  if (lang === 'tr') {
+    if (t.match(/yazılım|kod|developer|javascript|python|ai|yapay zeka|teknoloji/)) cats.push('teknoloji');
+    if (t.match(/girişim|startup|şirket|kurucu|founder/))                           cats.push('girişim');
+    if (t.match(/pazarlama|marka|kampanya|reklam|içerik|sosyal medya/))             cats.push('pazarlama');
+    if (t.match(/para|yatırım|finans|borsa|ekonomi|bütçe/))                         cats.push('finans');
+    if (t.match(/öğren|eğitim|kurs|sertifika|kitap|beceri/))                        cats.push('eğitim');
+    if (t.match(/spor|sağlık|fitness|koşu|meditasyon|wellness/))                    cats.push('sağlık');
+    if (t.match(/lider|yönet|takım|ekip|strateji|organizasyon/))                    cats.push('liderlik');
+    if (t.match(/kariyer|iş|çalış|mesleki|profesyonel|pozisyon|işe alım/))          cats.push('kariyer');
+    if (t.match(/remote|uzak|evden|hibrit|home office/))                             cats.push('uzakçalışma');
+    if (!cats.length) cats = ['genel'];
+    const db        = HASHTAG_DB;
+    const primary   = db[cats[0]] || db.genel;
+    const secondary = cats[1] ? db[cats[1]].slice(0, 2) : [];
+    const fallback  = db.genel.filter(h => !primary.includes(h) && !secondary.includes(h)).slice(0, 2);
+    return [...primary.slice(0, 6), ...secondary, ...fallback].slice(0, 10);
+  } else {
+    if (t.match(/software|code|developer|javascript|python|ai|artificial intelligence|tech/)) cats.push('technology');
+    if (t.match(/startup|company|founder|entrepreneur|venture|scaleup/))                      cats.push('startup');
+    if (t.match(/marketing|brand|campaign|advertising|content|social media|seo/))             cats.push('marketing');
+    if (t.match(/money|invest|finance|stock|economy|budget|fintech|wealth/))                  cats.push('finance');
+    if (t.match(/learn|education|course|certification|book|skill|mentor/))                    cats.push('education');
+    if (t.match(/fitness|health|wellness|workout|meditation|exercise|mindfulness/))           cats.push('health');
+    if (t.match(/leader|manage|team|strategy|organization|culture|execute/))                  cats.push('leadership');
+    if (t.match(/career|job|work|professional|position|hiring|recrui/))                       cats.push('career');
+    if (t.match(/remote|work from home|hybrid|digital nomad|wfh|homeoffice/))                cats.push('remote');
+    if (!cats.length) cats = ['general'];
+    const db        = HASHTAG_DB_EN;
+    const primary   = db[cats[0]] || db.general;
+    const secondary = cats[1] ? db[cats[1]].slice(0, 2) : [];
+    const fallback  = db.general.filter(h => !primary.includes(h) && !secondary.includes(h)).slice(0, 2);
+    return [...primary.slice(0, 6), ...secondary, ...fallback].slice(0, 10);
+  }
 }
 
 /* =============================================
@@ -585,7 +640,7 @@ function suggestHashtags(text) {
 function calcReadabilityScore(text) {
   if (!text || text.trim().length < 50) return null;
 
-  let score = 5;
+  let score = 6;
 
   const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
   const avgLen    = sentences.reduce((a, s) => a + s.split(' ').length, 0) / (sentences.length || 1);
@@ -598,11 +653,16 @@ function calcReadabilityScore(text) {
   if (emojiCount >= 1 && emojiCount <= 8) score += 0.5;
   else if (emojiCount > 12)               score -= 0.5;
 
+  // Hook detection — language-agnostic
   const first = text.split('\n')[0] || '';
-  if (first.includes('?') || first.match(/^(Hiç|Bir gün|Geçen|Bugün)/i)) score += 1;
+  if (first.includes('?')) score += 1;
+  else if (first.match(/^(I |My |Did |Have |What |How |Why |One |Never |Stop |Start |Most |Hiç |Bir gün|Geçen|Bugün|Ben |Benim)/i)) score += 0.5;
 
   if (text.match(/^[•\-→▶️1-9]/m)) score += 0.5;
-  if (text.match(/yorum|düşünüyor|paylaş/i)) score += 0.5;
+
+  // Engagement — language-agnostic: CTA separator + any question mark
+  if (text.includes('―')) score += 0.5;
+  if ((text.match(/\?/g) || []).length >= 1) score += 0.5;
 
   const len = text.length;
   if (len >= 500 && len <= 2000) score += 0.5;
