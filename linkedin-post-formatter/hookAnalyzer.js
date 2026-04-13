@@ -1,5 +1,5 @@
 /* =============================================
-   LinkedIn Post Formatter — Hook Analizi
+   Postify — Hook Analizi
    ============================================= */
 
 'use strict';

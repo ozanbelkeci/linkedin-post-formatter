@@ -1,5 +1,5 @@
 /* =============================================
-   LinkedIn Post Formatter — Service Worker
+   Postify — Service Worker
    Manifest V3 Background Script
    ============================================= */
 
@@ -8,7 +8,7 @@
 // Extension yüklendiğinde çalışır
 chrome.runtime.onInstalled.addListener(({ reason }) => {
   if (reason === 'install') {
-    console.log('[LinkedIn Post Formatter] Extension yüklendi. Hoş geldiniz!');
+    console.log('[Postify] Extension yüklendi. Hoş geldiniz!');
 
     // Varsayılan ayarları kaydet
     chrome.storage.local.set({
@@ -19,7 +19,7 @@ chrome.runtime.onInstalled.addListener(({ reason }) => {
     });
 
   } else if (reason === 'update') {
-    console.log('[LinkedIn Post Formatter] Extension güncellendi.');
+    console.log('[Postify] Extension güncellendi.');
   }
 });
 

@@ -1,4 +1,4 @@
-# Cloudflare Workers — LinkedIn Post Formatter Proxy
+# Cloudflare Workers — Postify Proxy
 # Deploy: wrangler deploy
 
 name       = "linkedin-post-formatter-api"

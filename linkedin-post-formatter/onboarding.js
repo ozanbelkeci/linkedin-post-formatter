@@ -1,5 +1,5 @@
 /* =============================================
-   LinkedIn Post Formatter — Onboarding Turu
+   Postify — Onboarding Turu
    ============================================= */
 
 'use strict';

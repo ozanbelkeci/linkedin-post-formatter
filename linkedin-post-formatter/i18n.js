@@ -1,5 +1,5 @@
 /* =============================================
-   LinkedIn Post Formatter — i18n (UI Dilleri)
+   Postify — i18n (UI Dilleri)
    ============================================= */
 
 'use strict';
@@ -7,7 +7,7 @@
 const I18N = {
   tr: {
     write:              'Yaz',
-    appTitle:           'Post Formatter',
+    appTitle:           'Postify',
     btnUpgrade:         'Pro\'ya Geç',
     templateLabel:      'Şablon',
     toneLabel:          'Ton',
@@ -210,7 +210,7 @@ const I18N = {
   },
   en: {
     write:              'Write',
-    appTitle:           'Post Formatter',
+    appTitle:           'Postify',
     btnUpgrade:         'Upgrade to Pro',
     templateLabel:      'Template',
     toneLabel:          'Tone',
@@ -413,7 +413,7 @@ const I18N = {
   },
   fr: {
     write:              'Écrire',
-    appTitle:           'Post Formatter',
+    appTitle:           'Postify',
     btnUpgrade:         'Passer à Pro',
     templateLabel:      'Modèle',
     toneLabel:          'Ton',
@@ -614,7 +614,7 @@ const I18N = {
   },
   de: {
     write:              'Schreiben',
-    appTitle:           'Post Formatter',
+    appTitle:           'Postify',
     btnUpgrade:         'Auf Pro upgraden',
     templateLabel:      'Vorlage',
     toneLabel:          'Ton',
@@ -815,7 +815,7 @@ const I18N = {
   },
   es: {
     write:              'Escribir',
-    appTitle:           'Post Formatter',
+    appTitle:           'Postify',
     btnUpgrade:         'Actualizar a Pro',
     templateLabel:      'Plantilla',
     toneLabel:          'Tono',

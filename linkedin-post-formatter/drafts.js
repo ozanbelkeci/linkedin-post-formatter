@@ -1,5 +1,5 @@
 /* =============================================
-   LinkedIn Post Formatter — Draft Sistemi
+   Postify — Draft Sistemi
    ============================================= */
 
 'use strict';

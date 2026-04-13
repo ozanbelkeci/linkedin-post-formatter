@@ -1,4 +1,4 @@
-# Postify — LinkedIn Post Formatter
+# Postify
 
 Chrome Extension (Manifest V3) + Cloudflare Worker proxy. LinkedIn postlarını AI ile formatlar.
 
@@ -200,7 +200,7 @@ curl -X POST https://linkedin-post-formatter-api.belkeci-ozan.workers.dev/format
   -d '{"text":"test post","mode":"hikaye","ton":"profesyonel"}'
 
 # Extension reload
-# chrome://extensions → "TEST - Linkedin Post Formatter" → Reload butonu
+# chrome://extensions → "TEST - Postify" → Reload butonu
 ```
 
 ---

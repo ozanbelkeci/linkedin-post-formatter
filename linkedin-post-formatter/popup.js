@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════
-   LinkedIn Post Formatter — App Logic v2.0
+   Postify — App Logic v2.0
    ═══════════════════════════════════════════════ */
 
 'use strict';

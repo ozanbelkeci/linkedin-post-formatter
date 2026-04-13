@@ -1,4 +1,4 @@
-# LinkedIn Post Formatter — Büyük Upgrade
+# Postify — Büyük Upgrade
 
 ## Genel Bakış
 

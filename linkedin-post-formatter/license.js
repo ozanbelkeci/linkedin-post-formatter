@@ -1,5 +1,5 @@
 /* =============================================
-   LinkedIn Post Formatter — Lisans Yönetimi
+   Postify — Lisans Yönetimi
    Aşama 4: Gumroad License Key API Entegrasyonu
    ============================================= */
 

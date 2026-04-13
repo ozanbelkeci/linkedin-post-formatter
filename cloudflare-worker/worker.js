@@ -1,5 +1,5 @@
 /**
- * LinkedIn Post Formatter — Cloudflare Worker Proxy
+ * Postify — Cloudflare Worker Proxy
  *
  * Endpoints:
  *   POST /format        → Groq (llama-3.1-8b-instant) ile şablona özel formatlama

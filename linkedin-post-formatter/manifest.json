@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "TEST - Linkedin Post Formatter",
+  "name": "TEST - Postify",
   "version": "2.0.0",
   "description": "Format your LinkedIn posts instantly. Get more engagement with professional templates, hashtag suggestions, and readability scores.",
   "permissions": ["storage"],
@@ -12,7 +12,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "LinkedIn Post Formatter",
+    "default_title": "Postify",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
