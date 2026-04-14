@@ -1,14 +1,14 @@
 /* =============================================
    Postify — Lisans Yönetimi
-   Aşama 4: Gumroad License Key API Entegrasyonu
+   Polar.sh License Key API Entegrasyonu
    ============================================= */
 
 'use strict';
 
 const LicenseManager = (() => {
 
-  // Gumroad ürün ID'si — Gumroad'dan ürün oluşturduktan sonra buraya ekle
-  const GUMROAD_PRODUCT_ID = 'YOUR_GUMROAD_PRODUCT_ID';
+  // Lisans doğrulama worker üzerinden yapılır — token client'ta görünmez
+  const VALIDATE_URL = 'https://linkedin-post-formatter-api.belkeci-ozan.workers.dev/validate-license';
 
   // Cache süresi: 24 saat (ms)
   const CACHE_DURATION_MS = 24 * 60 * 60 * 1000;
@@ -21,7 +21,6 @@ const LicenseManager = (() => {
       if (typeof chrome !== 'undefined' && chrome.storage) {
         chrome.storage.local.get(keys, resolve);
       } else {
-        // Geliştirme fallback
         const result = {};
         const keyArr = typeof keys === 'string' ? [keys] : keys;
         keyArr.forEach(k => {
@@ -61,21 +60,20 @@ const LicenseManager = (() => {
      Premium Durumu Kontrol Et
      ------------------------------------------ */
   async function isPremium() {
-    const data = await storageGet(['licenseKey', 'licenseVerifiedAt', 'licenseValid']);
-
-    const { licenseKey, licenseVerifiedAt, licenseValid } = data;
+    const data = await storageGet(['licenseKey', 'validatedAt', 'licenseValid']);
+    const { licenseKey, validatedAt, licenseValid } = data;
 
     if (!licenseKey || !licenseValid) return false;
 
     // Cache hâlâ geçerliyse doğrulamadan dön
-    if (licenseVerifiedAt) {
-      const elapsed = Date.now() - licenseVerifiedAt;
+    if (validatedAt) {
+      const elapsed = Date.now() - validatedAt;
       if (elapsed < CACHE_DURATION_MS) {
         return licenseValid === true;
       }
     }
 
-    // Cache süresi dolmuşsa yeniden doğrula (arka planda)
+    // Cache süresi dolmuşsa arka planda yeniden doğrula
     verifyAndCache(licenseKey).catch(() => {});
 
     // Şimdilik mevcut cache'i döndür
@@ -83,94 +81,91 @@ const LicenseManager = (() => {
   }
 
   /* ------------------------------------------
-     Lisans Doğrula (Gumroad API)
+     Lisans Doğrula (public entry point)
      ------------------------------------------ */
   async function verify(licenseKey) {
-    if (!licenseKey || licenseKey.trim().length < 8) {
+    const clean = (licenseKey || '').trim().toUpperCase();
+    if (!clean || !/^[A-Z0-9-]{8,100}$/.test(clean)) {
       return { success: false, error: 'Geçersiz lisans anahtarı formatı.' };
     }
-
-    // Ürün ID henüz tanımlanmamışsa test moduna geç
-    if (GUMROAD_PRODUCT_ID === 'YOUR_GUMROAD_PRODUCT_ID') {
-      return verifyTestMode(licenseKey);
-    }
-
-    return verifyWithGumroad(licenseKey);
+    return verifyWithPolar(clean);
   }
 
   /* ------------------------------------------
-     Gumroad API ile Gerçek Doğrulama
+     Worker üzerinden Polar.sh Doğrulama
+     Token client'ta görünmez; worker gizli tutar.
      ------------------------------------------ */
-  async function verifyWithGumroad(licenseKey) {
+  async function verifyWithPolar(key) {
     try {
-      const response = await fetch('https://api.gumroad.com/v2/licenses/verify', {
+      const response = await fetch(VALIDATE_URL, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          product_id:  GUMROAD_PRODUCT_ID,
-          license_key: licenseKey.trim()
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key }),
       });
 
       if (!response.ok) {
-        return { success: false, error: 'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edin.' };
+        return { success: false, networkError: true, error: 'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edin.' };
       }
 
       const data = await response.json();
 
-      if (data.success && !data.purchase.refunded && !data.purchase.chargebacked) {
-        await cacheValidLicense(licenseKey);
-        return {
-          success:     true,
-          email:       data.purchase.email,
-          createdAt:   data.purchase.created_at
-        };
-      } else {
-        await invalidateLicense();
-        const reason = data.purchase?.refunded
-          ? 'Bu lisans iade edilmiş.'
-          : (data.message || 'Geçersiz lisans anahtarı.');
-        return { success: false, error: reason };
+      if (data.success) {
+        await cacheValidLicense(key);
+        return { success: true };
       }
 
+      // networkError flag'i worker'dan gelebilir (Polar'a ulaşılamadı)
+      if (data.networkError) {
+        return { success: false, networkError: true, error: data.error || 'Bağlantı hatası.' };
+      }
+
+      await invalidateLicense();
+      return { success: false, error: data.error || 'Geçersiz lisans anahtarı.' };
+
     } catch (err) {
-      console.error('[LicenseManager] Gumroad API hatası:', err);
-      return { success: false, error: 'Bağlantı hatası. Lütfen tekrar deneyin.' };
+      console.error('[LicenseManager] Worker bağlantı hatası:', err);
+      return { success: false, networkError: true, error: 'Bağlantı hatası. Lütfen tekrar deneyin.' };
     }
   }
 
   /* ------------------------------------------
-     Test Modu (Gumroad ID ayarlanmamışsa)
+     Extension Açılışında Doğrulama
+     Her açılışta Polar API'ye sorar; ağ hatası olursa
+     önbelleğe düşer (offline kullanıcıyı cezalandırmaz).
      ------------------------------------------ */
-  async function verifyTestMode(licenseKey) {
-    const DEMO_KEYS = [
-      'LINKEDIN-PRO-TEST-2024',
-    ];
+  async function validateOnOpen() {
+    const data = await storageGet(['licenseKey', 'licenseValid', 'validatedAt']);
 
-    await new Promise(r => setTimeout(r, 800)); // API gecikmesi simülasyonu
+    // Kayıtlı key yok → kesinlikle free
+    if (!data.licenseKey) return { isPremium: false };
 
-    if (DEMO_KEYS.includes(licenseKey.toUpperCase())) {
-      await cacheValidLicense(licenseKey);
-      return {
-        success:  true,
-        testMode: true,
-        email:    'test@example.com'
-      };
+    // Cache hâlâ geçerliyse Polar API'ye gitme
+    if (data.licenseValid === true && data.validatedAt) {
+      const elapsed = Date.now() - data.validatedAt;
+      if (elapsed < CACHE_DURATION_MS) {
+        return { isPremium: true };
+      }
     }
 
-    return {
-      success: false,
-      error:   'Geçersiz lisans anahtarı.'
-    };
+    const result = await verifyWithPolar(data.licenseKey);
+
+    if (result.success) {
+      return { isPremium: true };
+    } else if (result.networkError) {
+      // Ağ hatası → önbelleğe dön, kullanıcıyı cezalandırma
+      return { isPremium: data.licenseValid === true, offlineMode: true };
+    } else {
+      // Anahtar iptal edilmiş veya geçersiz → premium'u kapat
+      await invalidateLicense();
+      return { isPremium: false, revoked: true };
+    }
   }
 
   /* ------------------------------------------
      Arka Planda Cache Yenileme
      ------------------------------------------ */
-  async function verifyAndCache(licenseKey) {
-    const result = await verifyWithGumroad(licenseKey);
+  async function verifyAndCache(key) {
+    const result = await verifyWithPolar(key);
     if (!result.success) {
       await invalidateLicense();
     }
@@ -179,39 +174,39 @@ const LicenseManager = (() => {
   /* ------------------------------------------
      Cache İşlemleri
      ------------------------------------------ */
-  async function cacheValidLicense(licenseKey) {
+  async function cacheValidLicense(key) {
     await storageSet({
-      licenseKey,
-      licenseValid:      true,
-      licenseVerifiedAt: Date.now()
+      licenseKey:   key,
+      licenseValid: true,
+      validatedAt:  Date.now(),
     });
   }
 
   async function invalidateLicense() {
     await storageSet({
-      licenseValid:      false,
-      licenseVerifiedAt: Date.now()
+      licenseValid: false,
+      validatedAt:  Date.now(),
     });
   }
 
   /* ------------------------------------------
-     Lisansı Kaldır (çıkış yap)
+     Lisansı Kaldır (bu cihazdan)
      ------------------------------------------ */
   async function deactivate() {
-    await storageRemove(['licenseKey', 'licenseValid', 'licenseVerifiedAt']);
+    await storageRemove(['licenseKey', 'licenseValid', 'validatedAt']);
   }
 
   /* ------------------------------------------
      Lisans Bilgisi Al
      ------------------------------------------ */
   async function getLicenseInfo() {
-    const data = await storageGet(['licenseKey', 'licenseVerifiedAt', 'licenseValid']);
+    const data = await storageGet(['licenseKey', 'validatedAt', 'licenseValid']);
     return {
-      key:        data.licenseKey || null,
-      isValid:    data.licenseValid || false,
-      lastCheck:  data.licenseVerifiedAt
-        ? new Date(data.licenseVerifiedAt).toLocaleDateString('tr-TR')
-        : null
+      key:       data.licenseKey || null,
+      isValid:   data.licenseValid || false,
+      lastCheck: data.validatedAt
+        ? new Date(data.validatedAt).toLocaleDateString('tr-TR')
+        : null,
     };
   }
 
@@ -222,9 +217,7 @@ const LicenseManager = (() => {
 
   async function checkFeatureAccess(feature) {
     const premium = await isPremium();
-    if (PREMIUM_FEATURES.includes(feature) && !premium) {
-      return false;
-    }
+    if (PREMIUM_FEATURES.includes(feature) && !premium) return false;
     return true;
   }
 
@@ -233,6 +226,7 @@ const LicenseManager = (() => {
      ------------------------------------------ */
   return {
     isPremium,
+    validateOnOpen,
     verify,
     deactivate,
     getLicenseInfo,

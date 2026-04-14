@@ -16,6 +16,7 @@
   <header class="header">
     <div class="header-left">
       <div class="header-wordmark">
+        <img src="icons/icon48.png" alt="Postify" class="header-logo" />
         <span id="appTitle">Postify</span>
       </div>
     </div>
@@ -365,16 +366,56 @@
       </div>
     </div>
 
-    <!-- Premium Status -->
+    <!-- Premium Status & License Key -->
     <div class="settings-section">
       <div class="settings-label" data-i18n="premiumStatus">Premium Status</div>
-      <div class="settings-row">
+
+      <!-- Status row -->
+      <div class="settings-row" style="margin-bottom:10px;">
         <span id="settingsPremiumLabel">Free plan</span>
-        <div style="display:flex;gap:6px;">
-          <button id="btnSettingsUpgrade" class="btn-upgrade" style="font-size:11px;padding:4px 10px;"
-            data-i18n="upgrade">Upgrade</button>
-          <button id="btnDeactivate" class="btn-deactivate hidden" data-i18n="deactivate">Remove License</button>
+        <button id="btnSettingsUpgrade" class="btn-upgrade" style="font-size:11px;padding:4px 10px;">
+          Premium'u Aktif Et
+        </button>
+      </div>
+
+      <!-- License input group (shown when not premium) -->
+      <div id="licenseInputGroup">
+        <!-- Email delivery note -->
+        <p style="font-size:10px;color:var(--text-4);margin-bottom:8px;line-height:1.5;">
+          💡 Satın aldıktan sonra lisans anahtarınız e-posta adresinize gönderilecektir.
+          Anahtarı aşağıya girin ve aktif edin.
+        </p>
+        <div class="license-row">
+          <input id="settingsLicenseInput" type="text" class="license-input"
+            placeholder="POSTIFY-XXXX-XXXX-XXXX" spellcheck="false" autocomplete="off" />
+          <button id="btnSettingsActivate" class="btn-activate">Aktif Et</button>
         </div>
+        <p id="settingsLicenseMsg" class="msg hidden"></p>
+      </div>
+
+      <!-- Active license info (shown when premium) -->
+      <div id="licenseActiveGroup" class="hidden">
+        <div class="settings-row" style="margin-top:2px;margin-bottom:6px;">
+          <span id="licenseKeyPrefix"
+            style="font-size:11px;font-family:monospace;color:var(--text-3);letter-spacing:.04em;">—</span>
+          <button id="btnDeactivate" class="btn-deactivate" data-i18n="deactivate">Lisansı Kaldır</button>
+        </div>
+        <!-- Polar portal button -->
+        <a href="https://polar.sh/ozan-belkeci/portal" target="_blank" rel="noopener noreferrer"
+          class="btn-portal" data-i18n="portalBtnLabel">Aboneliğinizi iptal edin →</a>
+        <p style="font-size:10px;color:var(--text-4);margin-top:6px;line-height:1.6;"
+          data-i18n="portalCancelNote">
+          💳 Aboneliğinizi ve aylık ödemenizi iptal etmek için yukarıdaki portala gidin. İptal işlemi anında gerçekleşir, mevcut dönem sonuna kadar erişiminiz devam eder.
+        </p>
+        <!-- Cancel steps -->
+        <p style="font-size:10px;font-weight:600;color:var(--text-3);margin-top:10px;margin-bottom:4px;"
+          data-i18n="cancelStepsTitle">İptal adımları:</p>
+        <ol style="font-size:10px;color:var(--text-4);line-height:1.7;margin:0;padding-left:16px;">
+          <li data-i18n="cancelStep1">Açılan sayfada e-posta adresinizi girin.</li>
+          <li data-i18n="cancelStep2">E-postanıza gelen onay kodunu girin.</li>
+          <li data-i18n="cancelStep3">"Overview" sayfasında "Manage subscription" butonuna tıklayın.</li>
+          <li data-i18n="cancelStep4">"Cancel Subscription" butonuna tıklayarak iptal edin.</li>
+        </ol>
       </div>
     </div>
 
@@ -509,8 +550,8 @@
           </div>
         </div>
 
-        <a id="btnGumroad" href="https://gumroad.com" target="_blank" class="btn-purchase" data-i18n="getPro">
-          Get Pro — $6 / month
+        <a id="btnPurchase" href="https://buy.polar.sh/polar_cl_0F5MBFNqgj2aqh8e8LfYJPankoTeyXjlN0z6P3lCNPZ" target="_blank" rel="noopener noreferrer" class="btn-purchase">
+          Premium'u Satın Al — $6 / ay
         </a>
 
         <div class="license-section">
@@ -522,6 +563,63 @@
           </div>
           <p id="licenseError" class="msg msg-error   hidden"></p>
           <p id="licenseSuccess" class="msg msg-success hidden"></p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       DEACTIVATE CONFIRM MODAL
+  ═══════════════════════════════════════ -->
+  <div id="deactivateModal" class="overlay dialog-overlay hidden">
+    <div class="dialog" style="max-width:340px;">
+
+      <div class="dialog-header">
+        <div class="dialog-icon" style="background:var(--error-bg,#fef2f2);color:var(--error,#dc2626);">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        </div>
+        <button id="btnCloseDeactivate" class="icon-close dialog-close" aria-label="Close">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="dialog-body">
+        <h2 class="dialog-title" style="font-size:15px;" data-i18n="deactivateModalTitle">Lisansı Bu Cihazdan Kaldır</h2>
+        <p class="dialog-sub" style="margin-bottom:14px;" data-i18n="deactivateModalDesc1">
+          Lisansınızı bu cihazdan kaldırmak üzeresiniz. Bu işlem yalnızca yerel kaydı siler — aboneliğiniz aktif kalmaya devam eder.
+        </p>
+        <p class="dialog-sub" style="margin-bottom:16px;font-weight:500;" data-i18n="deactivateModalDesc2">
+          Aboneliğinizi tamamen iptal etmek istiyorsanız aşağıdaki portale gidin:
+        </p>
+
+        <a href="https://polar.sh/ozan-belkeci/portal" target="_blank" rel="noopener noreferrer"
+          class="btn-portal" style="display:block;text-align:center;margin-bottom:12px;"
+          data-i18n="portalBtnLabel">Aboneliğinizi iptal edin →</a>
+
+        <!-- Cancel steps -->
+        <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:7px;padding:10px 12px;margin-bottom:14px;">
+          <p style="font-size:10px;font-weight:600;color:var(--text-3);margin:0 0 5px;"
+            data-i18n="cancelStepsTitle">İptal adımları:</p>
+          <ol style="font-size:10px;color:var(--text-4);line-height:1.8;margin:0;padding-left:16px;">
+            <li data-i18n="cancelStep1">Açılan sayfada e-posta adresinizi girin.</li>
+            <li data-i18n="cancelStep2">E-postanıza gelen onay kodunu girin.</li>
+            <li data-i18n="cancelStep3">"Overview" sayfasında "Manage subscription" butonuna tıklayın.</li>
+            <li data-i18n="cancelStep4">"Cancel Subscription" butonuna tıklayarak iptal edin.</li>
+          </ol>
+        </div>
+
+        <div style="display:flex;gap:8px;">
+          <button id="btnCancelDeactivate"
+            style="flex:1;padding:8px 0;border-radius:7px;border:1px solid var(--border);background:var(--bg-2);color:var(--text-1);font-size:12px;cursor:pointer;"
+            data-i18n="deactivateCancelBtn">Vazgeç</button>
+          <button id="btnConfirmDeactivate"
+            style="flex:1;padding:8px 0;border-radius:7px;border:none;background:#dc2626;color:#fff;font-size:12px;font-weight:600;cursor:pointer;"
+            data-i18n="deactivateConfirmBtn">Lisansı Kaldır</button>
         </div>
       </div>
 

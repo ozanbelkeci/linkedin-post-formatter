@@ -83,7 +83,7 @@ const el = {
   btnClearHistory:     $('btnClearHistory'),
   premiumModal:        $('premiumModal'),
   btnClosePremium:     $('btnClosePremium'),
-  btnGumroad:          $('btnGumroad'),
+  btnPurchase:         $('btnPurchase'),
   licenseKeyInput:     $('licenseKeyInput'),
   btnActivate:         $('btnActivate'),
   licenseError:        $('licenseError'),
@@ -107,10 +107,16 @@ const el = {
   // Settings
   langSelect:          $('langSelect'),
   themeSelect:         $('themeSelect'),
-  settingsPremiumLabel:$('settingsPremiumLabel'),
-  btnSettingsUpgrade:  $('btnSettingsUpgrade'),
-  btnDeactivate:       $('btnDeactivate'),
-  apiStatusText:       $('apiStatusText'),
+  settingsPremiumLabel: $('settingsPremiumLabel'),
+  btnSettingsUpgrade:   $('btnSettingsUpgrade'),
+  btnDeactivate:        $('btnDeactivate'),
+  licenseInputGroup:    $('licenseInputGroup'),
+  licenseActiveGroup:   $('licenseActiveGroup'),
+  settingsLicenseInput: $('settingsLicenseInput'),
+  btnSettingsActivate:  $('btnSettingsActivate'),
+  settingsLicenseMsg:   $('settingsLicenseMsg'),
+  licenseKeyPrefix:     $('licenseKeyPrefix'),
+  apiStatusText:        $('apiStatusText'),
   apiStatusDot:        $('apiStatusDot'),
   apiUsageText:        $('apiUsageText'),
 };
@@ -119,7 +125,7 @@ const el = {
    INIT
    ═══════════════════════════════════════════════ */
 async function init() {
-  await loadPremiumStatus();
+  const licenseResult = await loadPremiumStatus();
   await loadHistory();
   await loadSettings();
   await loadToneProfile();
@@ -130,14 +136,25 @@ async function init() {
   await renderDraftsList();
   checkApiStatus();
   Onboarding.start(state.lang, t);
+  if (licenseResult && licenseResult.revoked) {
+    showToast('Lisansınız doğrulanamadı. Premium özellikler devre dışı bırakıldı.', true);
+  }
 }
 
 /* ═══════════════════════════════════════════════
    SETTINGS (lang, theme)
    ═══════════════════════════════════════════════ */
+
+/** Tarayıcı/sistem dilini algılar; desteklenmiyorsa 'en' döner */
+function detectSystemLang() {
+  const codes   = SUPPORTED_LANGS.map(l => l.code);
+  const browser = (navigator.language || 'en').split('-')[0].toLowerCase();
+  return codes.includes(browser) ? browser : 'en';
+}
+
 async function loadSettings() {
   const data = await storageGet(['preferredLanguage', 'colorScheme']);
-  state.lang        = data.preferredLanguage || 'en';
+  state.lang        = data.preferredLanguage || detectSystemLang();
   state.colorScheme = data.colorScheme       || 'auto';
 
   el.langSelect.innerHTML = '';
@@ -201,7 +218,9 @@ function applyLang(lang) {
    PREMIUM
    ═══════════════════════════════════════════════ */
 async function loadPremiumStatus() {
-  state.isPremium = await LicenseManager.isPremium();
+  const result    = await LicenseManager.validateOnOpen();
+  state.isPremium = result.isPremium;
+  return result;
 }
 
 function applyPremiumUI() {
@@ -213,14 +232,24 @@ function applyPremiumUI() {
     el.btnAnalyze.classList.remove('hidden');
     el.settingsPremiumLabel.textContent = t(state.lang, 'proplanActive');
     el.btnSettingsUpgrade.classList.add('hidden');
-    el.btnDeactivate.classList.remove('hidden');
+    // Settings: show active group, hide input group
+    if (el.licenseInputGroup)  el.licenseInputGroup.classList.add('hidden');
+    if (el.licenseActiveGroup) el.licenseActiveGroup.classList.remove('hidden');
+    // Show first 8 chars of the key
+    LicenseManager.getLicenseInfo().then(info => {
+      if (el.licenseKeyPrefix && info.key) {
+        el.licenseKeyPrefix.textContent = info.key.slice(0, 8).toUpperCase() + '••••  ✓ Premium Aktif';
+      }
+    });
   } else {
     el.premiumBadge.classList.add('hidden');
     el.btnUpgrade.classList.remove('hidden');
     el.btnAnalyze.classList.add('hidden');
     el.settingsPremiumLabel.textContent = t(state.lang, 'freePlan');
     el.btnSettingsUpgrade.classList.remove('hidden');
-    el.btnDeactivate.classList.add('hidden');
+    // Settings: show input group, hide active group
+    if (el.licenseInputGroup)  el.licenseInputGroup.classList.remove('hidden');
+    if (el.licenseActiveGroup) el.licenseActiveGroup.classList.add('hidden');
   }
 
   document.querySelectorAll('.tpl-pro').forEach(chip => {
@@ -696,10 +725,10 @@ async function runViralAnalysis() {
   el.viralOverall.textContent = (r.overall || 0) + '/100';
 
   const rows = [
-    { icon: '🎯', label: t(state.lang, 'hookScore'),     val: r.hook     || 0 },
-    { icon: '❤️', label: t(state.lang, 'emotionScore'),  val: r.emotion  || 0 },
-    { icon: '🔄', label: t(state.lang, 'shareScore'),    val: r.shareability || 0 },
-    { icon: '📢', label: t(state.lang, 'ctaScore'),      val: r.cta      || 0 },
+    { icon: '🎯', label: t(state.lang, 'hookScore'),     val: clampPct(r.hook) },
+    { icon: '❤️', label: t(state.lang, 'emotionScore'),  val: clampPct(r.emotion) },
+    { icon: '🔄', label: t(state.lang, 'shareScore'),    val: clampPct(r.shareability) },
+    { icon: '📢', label: t(state.lang, 'ctaScore'),      val: clampPct(r.cta) },
   ];
 
   el.viralRows.innerHTML = rows.map(row => `
@@ -803,27 +832,34 @@ async function renderHashtags(text) {
   }
   if (!tags.length) tags = suggestHashtags(text);
 
-  el.hashtagList.innerHTML = '';
-  tags.slice(0, 10).forEach(tag => {
-    const btn = document.createElement('button');
-    btn.className = 'hashtag-btn';
-    btn.textContent = tag;
-    btn.addEventListener('click', () => {
-      appendHashtagToAll(tag);
-      btn.disabled = true;
-    });
-    el.hashtagList.appendChild(btn);
-  });
+  if (!tags.length) {
+    el.hashtagList.innerHTML = '';
+    return;
+  }
 
-  // Score hashtags (Pro)
-  if (tags.length && state.isPremium) {
-    runHashtagScore(tags.slice(0, 8));
+  // Groq per-second rate limit: /format (hashtags) çağrısından sonra kısa bekleme
+  await new Promise(r => setTimeout(r, 1500));
+
+  // Direkt scored view'e geç; API başarısız olursa chip fallback
+  const ok = await runHashtagScore(tags.slice(0, 8));
+  if (!ok) {
+    el.hashtagList.innerHTML = '';
+    tags.slice(0, 10).forEach(tag => {
+      const btn = document.createElement('button');
+      btn.className = 'hashtag-btn';
+      btn.textContent = tag;
+      btn.addEventListener('click', () => {
+        appendHashtagToAll(tag);
+        btn.disabled = true;
+      });
+      el.hashtagList.appendChild(btn);
+    });
   }
 }
 
 async function runHashtagScore(hashtags) {
   const data = await apiCall('/hashtag-score', { hashtags });
-  if (!data || !data.result || !data.result.length) return;
+  if (!data || !data.result || !data.result.length) return false;
 
   // Replace simple buttons with scored display
   el.hashtagList.innerHTML = '';
@@ -831,7 +867,7 @@ async function runHashtagScore(hashtags) {
   scored.className = 'hashtag-scored';
 
   data.result.forEach(item => {
-    const pct = Math.max(item.score || 0, 4);
+    const pct = Math.max(clampPct(item.score), 4);
     const row = document.createElement('div');
     row.className = 'hashtag-score-row';
     row.innerHTML = `
@@ -863,6 +899,7 @@ async function runHashtagScore(hashtags) {
   });
 
   el.hashtagList.appendChild(scored);
+  return true;
 }
 
 /* ═══════════════════════════════════════════════
@@ -1267,8 +1304,45 @@ async function activateLicense() {
 async function deactivateLicense() {
   await LicenseManager.deactivate();
   state.isPremium = false;
+  if (el.settingsLicenseInput) el.settingsLicenseInput.value = '';
+  if (el.settingsLicenseMsg)   el.settingsLicenseMsg.classList.add('hidden');
   applyPremiumUI();
   showToast(t(state.lang, 'licenseRemoved'));
+}
+
+async function activateLicenseFromSettings() {
+  const key = el.settingsLicenseInput ? el.settingsLicenseInput.value.trim() : '';
+  if (!key) {
+    showSettingsLicenseMsg(t(state.lang, 'licenseEnterKey'), 'error');
+    return;
+  }
+
+  if (el.btnSettingsActivate) {
+    el.btnSettingsActivate.textContent = t(state.lang, 'licenseChecking');
+    el.btnSettingsActivate.disabled    = true;
+  }
+  if (el.settingsLicenseMsg) el.settingsLicenseMsg.classList.add('hidden');
+
+  const res = await LicenseManager.verify(key);
+
+  if (el.btnSettingsActivate) {
+    el.btnSettingsActivate.textContent = 'Aktif Et';
+    el.btnSettingsActivate.disabled    = false;
+  }
+
+  if (res.success) {
+    state.isPremium = true;
+    applyPremiumUI();
+    showToast(t(state.lang, 'licenseUnlocked'));
+  } else {
+    showSettingsLicenseMsg(res.error || t(state.lang, 'licenseInvalid'), 'error');
+  }
+}
+
+function showSettingsLicenseMsg(msg, type) {
+  if (!el.settingsLicenseMsg) return;
+  el.settingsLicenseMsg.textContent = msg;
+  el.settingsLicenseMsg.className   = `msg msg-${type}`;
 }
 
 function showLicenseMsg(msg, type) {
@@ -1396,12 +1470,41 @@ function bindEvents() {
   el.premiumModal.addEventListener('click', e => { if (e.target === el.premiumModal) closePremiumModal(); });
   el.tonPremiumBadge.addEventListener('click', openPremiumModal);
   if (el.hashtagPremiumBadge) el.hashtagPremiumBadge.addEventListener('click', openPremiumModal);
-  el.btnSettingsUpgrade.addEventListener('click', openPremiumModal);
-  el.btnDeactivate.addEventListener('click', deactivateLicense);
+  el.btnSettingsUpgrade.addEventListener('click', () => {
+    chrome.tabs.create({ url: 'https://buy.polar.sh/polar_cl_0F5MBFNqgj2aqh8e8LfYJPankoTeyXjlN0z6P3lCNPZ' });
+  });
+  el.btnDeactivate.addEventListener('click', () => {
+    document.getElementById('deactivateModal').classList.remove('hidden');
+  });
+  document.getElementById('btnCloseDeactivate').addEventListener('click', () => {
+    document.getElementById('deactivateModal').classList.add('hidden');
+  });
+  document.getElementById('btnCancelDeactivate').addEventListener('click', () => {
+    document.getElementById('deactivateModal').classList.add('hidden');
+  });
+  document.getElementById('btnConfirmDeactivate').addEventListener('click', () => {
+    document.getElementById('deactivateModal').classList.add('hidden');
+    deactivateLicense();
+  });
+  document.getElementById('deactivateModal').addEventListener('click', e => {
+    if (e.target === document.getElementById('deactivateModal')) {
+      document.getElementById('deactivateModal').classList.add('hidden');
+    }
+  });
 
-  // License
+  // License — premium modal
   el.btnActivate.addEventListener('click', activateLicense);
   el.licenseKeyInput.addEventListener('keydown', e => { if (e.key === 'Enter') activateLicense(); });
+
+  // License — settings tab
+  if (el.btnSettingsActivate) {
+    el.btnSettingsActivate.addEventListener('click', activateLicenseFromSettings);
+  }
+  if (el.settingsLicenseInput) {
+    el.settingsLicenseInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') activateLicenseFromSettings();
+    });
+  }
 
   // History
   el.btnHistory.addEventListener('click', openHistory);
@@ -1463,6 +1566,8 @@ function storageSet(obj) {
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
+
+function clampPct(val) { return Math.max(0, Math.min(100, Number(val) || 0)); }
 
 /* ── START ── */
 document.addEventListener('DOMContentLoaded', init);

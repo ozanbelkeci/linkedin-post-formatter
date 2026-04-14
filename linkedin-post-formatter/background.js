@@ -30,6 +30,7 @@ function todayStr() {
 
 // Kullanım sayacını güncelle
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (sender.id !== chrome.runtime.id) return;
   if (message.type === 'INCREMENT_USAGE') {
     chrome.storage.local.get(['usageCount', 'dailyUsage', 'usageDate'], (data) => {
       const today    = todayStr();

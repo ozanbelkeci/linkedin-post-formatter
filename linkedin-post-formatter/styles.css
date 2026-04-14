@@ -130,6 +130,13 @@ body {
   flex-shrink: 0;
 }
 
+.header-logo {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border-radius: 4px;
+}
+
 .header-right {
   display: flex;
   align-items: center;
@@ -2155,6 +2162,24 @@ button:not(:focus-visible) {
   color: #fff;
 }
 
+/* Polar.sh portal link button */
+.btn-portal {
+  display: inline-block;
+  font-size: 11px;
+  padding: 5px 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  text-decoration: none;
+  background: var(--surface-2);
+  transition: background .15s, color .15s;
+}
+.btn-portal:hover {
+  background: var(--brand-subtle);
+  color: var(--brand);
+  border-color: var(--brand-border);
+}
+
 /* ═══════════════════════════════════════════════
    HASHTAG SCORE DISPLAY
    ═══════════════════════════════════════════════ */
@@ -2389,3 +2414,4 @@ kbd {
 .preview-after-cutoff {
   white-space: pre-wrap;
 }
+

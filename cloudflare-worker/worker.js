@@ -6,15 +6,17 @@
  *   POST /ab-test       → Aynı metin için iki farklı hook versiyonu üret
  *   POST /analyze       → Viral potansiyel analizi (JSON skor)
  *   POST /tone-analyze  → Yazı tonu profili çıkar (JSON)
- *   POST /hashtag-score → Hashtag popülerlik değerlendirmesi
- *   GET  /health        → Servis durumu + günlük kullanım
+ *   POST /hashtag-score     → Hashtag popülerlik değerlendirmesi
+ *   POST /validate-license  → Polar.sh lisans key doğrulama (token gizli kalır)
+ *   GET  /health            → Servis durumu + günlük kullanım
  *
  * KV namespace bağlantısı:
  *   wrangler.toml'da  [[kv_namespaces]] name = "RATE_LIMIT_KV"
  *
- * Environment variables:
- *   GROQ_API_KEY  — Groq Console'dan alınan API key
- *   RATE_LIMIT_KV — Cloudflare KV namespace binding
+ * Environment variables (wrangler secret put):
+ *   GROQ_API_KEY         — Groq Console'dan alınan API key
+ *   POLAR_ACCESS_TOKEN   — Polar.sh Organization Access Token
+ *   RATE_LIMIT_KV        — Cloudflare KV namespace binding
  */
 
 /* ─────────────────────────────────────────────
@@ -30,12 +32,16 @@ const KV_TTL_SECONDS     = 60 * 60 * 26; // 26 saat
 /* ─────────────────────────────────────────────
    CORS HEADERS
 ───────────────────────────────────────────── */
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  'Access-Control-Max-Age':       '86400',
-};
+function getCorsHeaders(request) {
+  const origin  = (request && request.headers.get('Origin')) || '';
+  const allowed = origin.startsWith('chrome-extension://') ? origin : 'null';
+  return {
+    'Access-Control-Allow-Origin':  allowed,
+    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Max-Age':       '86400',
+  };
+}
 
 /* ─────────────────────────────────────────────
    PROMPT BUILDER FONKSİYONLARI
@@ -328,10 +334,18 @@ async function incrementAndCheck(kv) {
   return { count: count + 1, exceeded: false };
 }
 
+/** IPv4/IPv6 formatını doğrular; geçersizse null döner */
+function sanitizeIp(ip) {
+  if (!ip) return null;
+  if (!/^[\d.:a-fA-F]{1,45}$/.test(ip)) return null;
+  return ip;
+}
+
 /** IP başına günlük limit kontrolü — aşıldıysa true döner */
 async function checkIpLimit(kv, ip) {
-  if (!ip) return false; // IP alınamıyorsa geç
-  const key = `ip:${getTodayKey()}:${ip}`;
+  const cleanIp = sanitizeIp(ip);
+  if (!cleanIp) return false; // Geçersiz/eksik IP → rate limit atla
+  const key = `ip:${getTodayKey()}:${cleanIp}`;
   const raw  = await kv.get(key);
   const count = raw ? parseInt(raw, 10) : 0;
   if (count >= PER_IP_DAILY_LIMIT) return true;
@@ -360,14 +374,28 @@ async function callGroq(apiKey, systemMsg, userMsg, temperature = 0.3) {
     ],
   };
 
-  const res = await fetch(url, {
-    method:  'POST',
-    headers: {
-      'Content-Type':  'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(body),
-  });
+  const controller = new AbortController();
+  const timeoutId  = setTimeout(() => controller.abort(), 25000);
+
+  let res;
+  try {
+    res = await fetch(url, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body:   JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (fetchErr) {
+    clearTimeout(timeoutId);
+    if (fetchErr.name === 'AbortError') {
+      throw new Error('İstek zaman aşımına uğradı. Lütfen tekrar deneyin.');
+    }
+    throw fetchErr;
+  }
+  clearTimeout(timeoutId);
 
   if (!res.ok) {
     const errText = await res.text();
@@ -393,52 +421,70 @@ class GroqError extends Error {
 /* ─────────────────────────────────────────────
    RESPONSE HELPERS
 ───────────────────────────────────────────── */
-function json(data, status = 200) {
+function json(data, status = 200, request = null) {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
-      ...CORS_HEADERS,
-      'Content-Type': 'application/json; charset=utf-8',
+      ...getCorsHeaders(request),
+      'Content-Type':           'application/json; charset=utf-8',
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options':        'DENY',
+      'Referrer-Policy':        'no-referrer',
+      'Cache-Control':          'no-store',
     },
   });
 }
 
-function error(message, status = 400, extra = {}) {
-  return json({ success: false, error: message, ...extra }, status);
+function error(message, status = 400, extra = {}, request = null) {
+  return json({ success: false, error: message, ...extra }, status, request);
 }
 
 /* ─────────────────────────────────────────────
    ROUTE HANDLERS
 ───────────────────────────────────────────── */
 
+/* Allowed values for whitelist validation */
+const ALLOWED_MODES = [
+  'hikaye','liste','fikir','vaka','ipucu','soru','istatistik','basari',
+  'hata','karsilastirma','manifesto','mektup','karar','tavsiye',
+  'hashtags','default','list',
+];
+const ALLOWED_TONES = ['samimi','motivasyonel','profesyonel'];
+
 /** POST /format */
 async function handleFormat(request, env) {
   const ct = request.headers.get('Content-Type') || '';
   if (!ct.includes('application/json')) {
-    return error('Content-Type application/json olmalı.', 415);
+    return error('Content-Type application/json olmalı.', 415, {}, request);
   }
 
   let body;
   try {
     body = await request.json();
   } catch {
-    return error('Geçersiz JSON formatı.', 400);
+    return error('Geçersiz JSON formatı.', 400, {}, request);
   }
 
   const { text, mode, ton } = body;
 
   if (typeof text !== 'string' || text.trim().length === 0) {
-    return error('"text" alanı boş olamaz.', 400);
+    return error('"text" alanı boş olamaz.', 400, {}, request);
   }
   if (text.length > 5_000) {
-    return error('Metin çok uzun. Maksimum 5.000 karakter.', 400);
+    return error('Metin çok uzun. Maksimum 5.000 karakter.', 400, {}, request);
+  }
+  if (mode && !ALLOWED_MODES.includes(mode)) {
+    return error('Geçersiz şablon modu.', 400, {}, request);
+  }
+  if (ton && !ALLOWED_TONES.includes(ton)) {
+    return error('Geçersiz ton değeri.', 400, {}, request);
   }
 
   // Per-IP rate limit kontrolü
   const clientIp = request.headers.get('CF-Connecting-IP') || '';
   const ipExceeded = await checkIpLimit(env.RATE_LIMIT_KV, clientIp);
   if (ipExceeded) {
-    return error('Çok fazla istek gönderdiniz. Lütfen yarın tekrar deneyin.', 429);
+    return error('Çok fazla istek gönderdiniz. Lütfen yarın tekrar deneyin.', 429, {}, request);
   }
 
   // Global günlük rate limit kontrolü
@@ -447,13 +493,14 @@ async function handleFormat(request, env) {
     return error(
       'Günlük kapasite doldu, yarın tekrar dene.',
       429,
-      { dailyLimit: DAILY_LIMIT, resetAt: 'UTC 00:00' }
+      { dailyLimit: DAILY_LIMIT, resetAt: 'UTC 00:00' },
+      request
     );
   }
 
   if (!env.GROQ_API_KEY) {
     console.error('GROQ_API_KEY environment variable tanımlanmamış.');
-    return error('Sunucu yapılandırma hatası.', 500);
+    return error('Sunucu yapılandırma hatası.', 500, {}, request);
   }
 
   // Şablona göre prompt seç
@@ -470,14 +517,14 @@ async function handleFormat(request, env) {
 
     if (err instanceof GroqError) {
       if (err.status === 429) {
-        return error('Groq API kota limiti aşıldı. Lütfen bir süre bekle.', 503);
+        return error('Groq API kota limiti aşıldı. Lütfen bir süre bekle.', 503, {}, request);
       }
       if (err.status === 400) {
-        return error('Geçersiz istek gönderildi.', 400);
+        return error('Geçersiz istek gönderildi.', 400, {}, request);
       }
     }
 
-    return error('Metin işlenirken bir hata oluştu. Lütfen tekrar deneyin.', 502);
+    return error('Metin işlenirken bir hata oluştu. Lütfen tekrar deneyin.', 502, {}, request);
   }
 
   return json({
@@ -488,11 +535,89 @@ async function handleFormat(request, env) {
       limit: DAILY_LIMIT,
       remaining: Math.max(0, DAILY_LIMIT - count),
     }
-  });
+  }, 200, request);
+}
+
+/** POST /validate-license — Polar.sh lisans key doğrulama proxy */
+async function handleValidateLicense(request, env) {
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body.key !== 'string') {
+    return error('Geçersiz istek formatı.', 400, {}, request);
+  }
+
+  const key = body.key.trim().toUpperCase();
+  if (!key || !/^[A-Z0-9-]{8,100}$/.test(key)) {
+    return json({ success: false, error: 'Geçersiz lisans anahtarı formatı.' }, 200, request);
+  }
+
+  // IP başına günlük 20 deneme limiti (brute-force koruması)
+  const licIp = sanitizeIp(request.headers.get('CF-Connecting-IP') || '');
+  if (licIp) {
+    const licIpKey = `lic_ip:${getTodayKey()}:${licIp}`;
+    const hits = parseInt(await env.RATE_LIMIT_KV.get(licIpKey) || '0', 10);
+    if (hits >= 20) {
+      return json({ success: false, error: 'Çok fazla deneme. Lütfen daha sonra tekrar deneyin.', networkError: true }, 200, request);
+    }
+    await env.RATE_LIMIT_KV.put(licIpKey, String(hits + 1), { expirationTtl: KV_TTL_SECONDS });
+  }
+
+  if (!env.POLAR_ACCESS_TOKEN) {
+    console.error('[validate-license] POLAR_ACCESS_TOKEN tanımlı değil');
+    return json({ success: false, error: 'Sunucu yapılandırma hatası.', networkError: true }, 200, request);
+  }
+
+  try {
+    const resp = await fetch('https://api.polar.sh/v1/license-keys/validate', {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${env.POLAR_ACCESS_TOKEN}`,
+      },
+      body: JSON.stringify({
+        key,
+        organization_id: '5c7dd4fb-9d76-46b4-8ed7-d245be8d64c2',
+      }),
+    });
+
+    const polarBody = await resp.json().catch(() => ({}));
+
+    // 401/403 → token geçersiz veya yetersiz yetki (sunucu tarafı sorun)
+    if (resp.status === 401 || resp.status === 403) {
+      return json({ success: false, error: 'Sunucu yapılandırma hatası.', networkError: true }, 200, request);
+    }
+
+    // 404 veya 422 → key bulunamadı / doğrulama hatası
+    if (resp.status === 404 || resp.status === 422) {
+      return json({ success: false, error: 'Geçersiz lisans anahtarı.' }, 200, request);
+    }
+
+    // Diğer 4xx
+    if (resp.status >= 400 && resp.status < 500) {
+      return json({ success: false, error: 'Geçersiz lisans anahtarı.' }, 200, request);
+    }
+
+    // 5xx → geçici sunucu sorunu (networkError → offline cache'e düş)
+    if (!resp.ok) {
+      return json({ success: false, error: 'Lisans doğrulanamadı. Lütfen tekrar deneyin.', networkError: true }, 200, request);
+    }
+
+    const data  = polarBody;
+    const valid = data.status === 'granted';
+
+    return json({
+      success: valid,
+      status:  data.status,
+      ...(valid ? {} : { error: 'Lisansınız aktif değil veya iptal edilmiş.' }),
+    }, 200, request);
+
+  } catch (err) {
+    console.error('[validate-license] Polar bağlantı hatası:', err);
+    return json({ success: false, error: 'Bağlantı hatası. Lütfen tekrar deneyin.', networkError: true }, 200, request);
+  }
 }
 
 /** GET /health */
-async function handleHealth(env) {
+async function handleHealth(request, env) {
   let usage = 0;
   try {
     usage = await getUsage(env.RATE_LIMIT_KV);
@@ -509,26 +634,26 @@ async function handleHealth(env) {
       remaining: Math.max(0, DAILY_LIMIT - usage),
     },
     timestamp: new Date().toISOString(),
-  });
+  }, 200, request);
 }
 
 /** POST /ab-test */
 async function handleAbTest(request, env) {
   const ct = request.headers.get('Content-Type') || '';
-  if (!ct.includes('application/json')) return error('Content-Type application/json olmalı.', 415);
+  if (!ct.includes('application/json')) return error('Content-Type application/json olmalı.', 415, {}, request);
 
   let body;
-  try { body = await request.json(); } catch { return error('Geçersiz JSON formatı.', 400); }
+  try { body = await request.json(); } catch { return error('Geçersiz JSON formatı.', 400, {}, request); }
 
   const { text, ton, lang } = body;
-  if (typeof text !== 'string' || text.trim().length === 0) return error('"text" alanı boş olamaz.', 400);
-  if (text.length > 5_000) return error('Metin çok uzun. Maksimum 5.000 karakter.', 400);
+  if (typeof text !== 'string' || text.trim().length === 0) return error('"text" alanı boş olamaz.', 400, {}, request);
+  if (text.length > 5_000) return error('Metin çok uzun. Maksimum 5.000 karakter.', 400, {}, request);
 
   const clientIp = request.headers.get('CF-Connecting-IP') || '';
-  if (await checkIpLimit(env.RATE_LIMIT_KV, clientIp)) return error('Çok fazla istek gönderdiniz. Lütfen yarın tekrar deneyin.', 429);
+  if (await checkIpLimit(env.RATE_LIMIT_KV, clientIp)) return error('Çok fazla istek gönderdiniz. Lütfen yarın tekrar deneyin.', 429, {}, request);
   const { count, exceeded } = await incrementAndCheck(env.RATE_LIMIT_KV);
-  if (exceeded) return error('Günlük kapasite doldu, yarın tekrar dene.', 429, { dailyLimit: DAILY_LIMIT, resetAt: 'UTC 00:00' });
-  if (!env.GROQ_API_KEY) return error('Sunucu yapılandırma hatası.', 500);
+  if (exceeded) return error('Günlük kapasite doldu, yarın tekrar dene.', 429, { dailyLimit: DAILY_LIMIT, resetAt: 'UTC 00:00' }, request);
+  if (!env.GROQ_API_KEY) return error('Sunucu yapılandırma hatası.', 500, {}, request);
 
   const langNames = { tr: 'Turkish', en: 'English', fr: 'French', de: 'German', es: 'Spanish' };
   const langInstruction = lang && langNames[lang]
@@ -550,31 +675,31 @@ OUTPUT RULES:
 
   try {
     const versionB = await callGroq(env.GROQ_API_KEY, systemB, text.trim(), 0.5);
-    return json({ success: true, versionB, usage: { today: count, limit: DAILY_LIMIT, remaining: Math.max(0, DAILY_LIMIT - count) } });
+    return json({ success: true, versionB, usage: { today: count, limit: DAILY_LIMIT, remaining: Math.max(0, DAILY_LIMIT - count) } }, 200, request);
   } catch (err) {
     console.error('AB test Groq hatası:', err.message);
-    if (err instanceof GroqError && err.status === 429) return error('Groq API kota limiti aşıldı. Lütfen bir süre bekle.', 503);
-    return error('Metin işlenirken bir hata oluştu. Lütfen tekrar deneyin.', 502);
+    if (err instanceof GroqError && err.status === 429) return error('Groq API kota limiti aşıldı. Lütfen bir süre bekle.', 503, {}, request);
+    return error('Metin işlenirken bir hata oluştu. Lütfen tekrar deneyin.', 502, {}, request);
   }
 }
 
 /** POST /analyze */
 async function handleAnalyze(request, env) {
   const ct = request.headers.get('Content-Type') || '';
-  if (!ct.includes('application/json')) return error('Content-Type application/json olmalı.', 415);
+  if (!ct.includes('application/json')) return error('Content-Type application/json olmalı.', 415, {}, request);
 
   let body;
-  try { body = await request.json(); } catch { return error('Geçersiz JSON formatı.', 400); }
+  try { body = await request.json(); } catch { return error('Geçersiz JSON formatı.', 400, {}, request); }
 
   const { text } = body;
-  if (typeof text !== 'string' || text.trim().length === 0) return error('"text" alanı boş olamaz.', 400);
-  if (text.length > 5_000) return error('Metin çok uzun. Maksimum 5.000 karakter.', 400);
+  if (typeof text !== 'string' || text.trim().length === 0) return error('"text" alanı boş olamaz.', 400, {}, request);
+  if (text.length > 5_000) return error('Metin çok uzun. Maksimum 5.000 karakter.', 400, {}, request);
 
   const clientIp = request.headers.get('CF-Connecting-IP') || '';
-  if (await checkIpLimit(env.RATE_LIMIT_KV, clientIp)) return error('Çok fazla istek gönderdiniz. Lütfen yarın tekrar deneyin.', 429);
+  if (await checkIpLimit(env.RATE_LIMIT_KV, clientIp)) return error('Çok fazla istek gönderdiniz. Lütfen yarın tekrar deneyin.', 429, {}, request);
   const { count, exceeded } = await incrementAndCheck(env.RATE_LIMIT_KV);
-  if (exceeded) return error('Günlük kapasite doldu, yarın tekrar dene.', 429, { dailyLimit: DAILY_LIMIT, resetAt: 'UTC 00:00' });
-  if (!env.GROQ_API_KEY) return error('Sunucu yapılandırma hatası.', 500);
+  if (exceeded) return error('Günlük kapasite doldu, yarın tekrar dene.', 429, { dailyLimit: DAILY_LIMIT, resetAt: 'UTC 00:00' }, request);
+  if (!env.GROQ_API_KEY) return error('Sunucu yapılandırma hatası.', 500, {}, request);
 
   const system = `You are a LinkedIn content analyst. Analyze the given post and return ONLY a valid JSON object (no markdown, no code blocks, no extra text).
 Rate each factor from 0 to 100. The "tip" field must be in the SAME language as the post.
@@ -585,8 +710,8 @@ Required format: {"hook":0,"emotion":0,"shareability":0,"cta":0,"overall":0,"tip
     raw = await callGroq(env.GROQ_API_KEY, system, text.trim(), 0.2);
   } catch (err) {
     console.error('Analyze Groq hatası:', err.message);
-    if (err instanceof GroqError && err.status === 429) return error('Groq API kota limiti aşıldı. Lütfen bir süre bekle.', 503);
-    return error('Analiz yapılırken bir hata oluştu. Lütfen tekrar deneyin.', 502);
+    if (err instanceof GroqError && err.status === 429) return error('Groq API kota limiti aşıldı. Lütfen bir süre bekle.', 503, {}, request);
+    return error('Analiz yapılırken bir hata oluştu. Lütfen tekrar deneyin.', 502, {}, request);
   }
 
   let result;
@@ -595,31 +720,33 @@ Required format: {"hook":0,"emotion":0,"shareability":0,"cta":0,"overall":0,"tip
     const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
     result = JSON.parse(jsonMatch ? jsonMatch[0] : cleaned);
   } catch {
-    return error('Analiz sonucu işlenemedi. Lütfen tekrar deneyin.', 502);
+    return error('Analiz sonucu işlenemedi. Lütfen tekrar deneyin.', 502, {}, request);
   }
 
-  return json({ success: true, result, usage: { today: count, limit: DAILY_LIMIT, remaining: Math.max(0, DAILY_LIMIT - count) } });
+  return json({ success: true, result, usage: { today: count, limit: DAILY_LIMIT, remaining: Math.max(0, DAILY_LIMIT - count) } }, 200, request);
 }
 
 /** POST /tone-analyze */
 async function handleToneAnalyze(request, env) {
   const ct = request.headers.get('Content-Type') || '';
-  if (!ct.includes('application/json')) return error('Content-Type application/json olmalı.', 415);
+  if (!ct.includes('application/json')) return error('Content-Type application/json olmalı.', 415, {}, request);
 
   let body;
-  try { body = await request.json(); } catch { return error('Geçersiz JSON formatı.', 400); }
+  try { body = await request.json(); } catch { return error('Geçersiz JSON formatı.', 400, {}, request); }
 
   const { posts } = body;
-  if (!Array.isArray(posts) || posts.length === 0) return error('"posts" alanı en az 1 metin içermelidir.', 400);
-  if (posts.length > 5) return error('En fazla 5 post gönderilebilir.', 400);
+  if (!Array.isArray(posts) || posts.length === 0) return error('"posts" alanı en az 1 metin içermelidir.', 400, {}, request);
+  if (posts.length > 5) return error('En fazla 5 post gönderilebilir.', 400, {}, request);
+  if (!posts.every(p => typeof p === 'string' && p.trim().length > 0))
+    return error('Her post metin (string) olmalıdır.', 400, {}, request);
   const combined = posts.map((p, i) => `Post ${i + 1}:\n${p}`).join('\n\n');
-  if (combined.length > 8_000) return error('Toplam metin çok uzun.', 400);
+  if (combined.length > 8_000) return error('Toplam metin çok uzun.', 400, {}, request);
 
   const clientIp = request.headers.get('CF-Connecting-IP') || '';
-  if (await checkIpLimit(env.RATE_LIMIT_KV, clientIp)) return error('Çok fazla istek gönderdiniz. Lütfen yarın tekrar deneyin.', 429);
+  if (await checkIpLimit(env.RATE_LIMIT_KV, clientIp)) return error('Çok fazla istek gönderdiniz. Lütfen yarın tekrar deneyin.', 429, {}, request);
   const { count, exceeded } = await incrementAndCheck(env.RATE_LIMIT_KV);
-  if (exceeded) return error('Günlük kapasite doldu, yarın tekrar dene.', 429, { dailyLimit: DAILY_LIMIT, resetAt: 'UTC 00:00' });
-  if (!env.GROQ_API_KEY) return error('Sunucu yapılandırma hatası.', 500);
+  if (exceeded) return error('Günlük kapasite doldu, yarın tekrar dene.', 429, { dailyLimit: DAILY_LIMIT, resetAt: 'UTC 00:00' }, request);
+  if (!env.GROQ_API_KEY) return error('Sunucu yapılandırma hatası.', 500, {}, request);
 
   const system = `You are a writing style analyst. Analyze the provided LinkedIn posts and return ONLY a valid JSON object (no markdown, no code blocks).
 Required format: {"style":"casual-professional","emojiUsage":"none|low|moderate|high","sentenceLength":"short|medium|long","personality":"motivational|analytical|storyteller|educator|thought-leader","keywords":["word1","word2","word3"]}
@@ -630,8 +757,8 @@ The "keywords" array should contain 3-5 characteristic words or phrases from the
     raw = await callGroq(env.GROQ_API_KEY, system, combined, 0.2);
   } catch (err) {
     console.error('Tone analyze Groq hatası:', err.message);
-    if (err instanceof GroqError && err.status === 429) return error('Groq API kota limiti aşıldı. Lütfen bir süre bekle.', 503);
-    return error('Ton analizi yapılırken bir hata oluştu. Lütfen tekrar deneyin.', 502);
+    if (err instanceof GroqError && err.status === 429) return error('Groq API kota limiti aşıldı. Lütfen bir süre bekle.', 503, {}, request);
+    return error('Ton analizi yapılırken bir hata oluştu. Lütfen tekrar deneyin.', 502, {}, request);
   }
 
   let result;
@@ -640,31 +767,31 @@ The "keywords" array should contain 3-5 characteristic words or phrases from the
     const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
     result = JSON.parse(jsonMatch ? jsonMatch[0] : cleaned);
   } catch {
-    return error('Ton profili işlenemedi. Lütfen tekrar deneyin.', 502);
+    return error('Ton profili işlenemedi. Lütfen tekrar deneyin.', 502, {}, request);
   }
 
-  return json({ success: true, result, usage: { today: count, limit: DAILY_LIMIT, remaining: Math.max(0, DAILY_LIMIT - count) } });
+  return json({ success: true, result, usage: { today: count, limit: DAILY_LIMIT, remaining: Math.max(0, DAILY_LIMIT - count) } }, 200, request);
 }
 
 /** POST /hashtag-score */
 async function handleHashtagScore(request, env) {
   const ct = request.headers.get('Content-Type') || '';
-  if (!ct.includes('application/json')) return error('Content-Type application/json olmalı.', 415);
+  if (!ct.includes('application/json')) return error('Content-Type application/json olmalı.', 415, {}, request);
 
   let body;
-  try { body = await request.json(); } catch { return error('Geçersiz JSON formatı.', 400); }
+  try { body = await request.json(); } catch { return error('Geçersiz JSON formatı.', 400, {}, request); }
 
   const { hashtags } = body;
-  if (!Array.isArray(hashtags) || hashtags.length === 0) return error('"hashtags" alanı boş olamaz.', 400);
-  if (hashtags.length > 20) return error('En fazla 20 hashtag gönderilebilir.', 400);
-  const validHashtags = hashtags.filter(h => typeof h === 'string' && h.startsWith('#') && h.length > 1);
-  if (validHashtags.length === 0) return error('Geçerli hashtag bulunamadı. # ile başlamalı.', 400);
+  if (!Array.isArray(hashtags) || hashtags.length === 0) return error('"hashtags" alanı boş olamaz.', 400, {}, request);
+  if (hashtags.length > 20) return error('En fazla 20 hashtag gönderilebilir.', 400, {}, request);
+  const validHashtags = hashtags.filter(h => typeof h === 'string' && h.startsWith('#') && h.length > 1 && h.length <= 100);
+  if (validHashtags.length === 0) return error('Geçerli hashtag bulunamadı. # ile başlamalı.', 400, {}, request);
 
   const clientIp = request.headers.get('CF-Connecting-IP') || '';
-  if (await checkIpLimit(env.RATE_LIMIT_KV, clientIp)) return error('Çok fazla istek gönderdiniz. Lütfen yarın tekrar deneyin.', 429);
+  if (await checkIpLimit(env.RATE_LIMIT_KV, clientIp)) return error('Çok fazla istek gönderdiniz. Lütfen yarın tekrar deneyin.', 429, {}, request);
   const { count, exceeded } = await incrementAndCheck(env.RATE_LIMIT_KV);
-  if (exceeded) return error('Günlük kapasite doldu, yarın tekrar dene.', 429, { dailyLimit: DAILY_LIMIT, resetAt: 'UTC 00:00' });
-  if (!env.GROQ_API_KEY) return error('Sunucu yapılandırma hatası.', 500);
+  if (exceeded) return error('Günlük kapasite doldu, yarın tekrar dene.', 429, { dailyLimit: DAILY_LIMIT, resetAt: 'UTC 00:00' }, request);
+  if (!env.GROQ_API_KEY) return error('Sunucu yapılandırma hatası.', 500, {}, request);
 
   const system = `You are a LinkedIn hashtag strategist. Score each hashtag based on LinkedIn popularity and niche relevance.
 Return ONLY a valid JSON array (no markdown, no code blocks).
@@ -677,8 +804,8 @@ Hashtags to analyze:`;
     raw = await callGroq(env.GROQ_API_KEY, system, validHashtags.join(' '), 0.2);
   } catch (err) {
     console.error('Hashtag score Groq hatası:', err.message);
-    if (err instanceof GroqError && err.status === 429) return error('Groq API kota limiti aşıldı. Lütfen bir süre bekle.', 503);
-    return error('Hashtag değerlendirmesi yapılırken bir hata oluştu. Lütfen tekrar deneyin.', 502);
+    if (err instanceof GroqError && err.status === 429) return error('Groq API kota limiti aşıldı. Lütfen bir süre bekle.', 503, {}, request);
+    return error('Hashtag değerlendirmesi yapılırken bir hata oluştu. Lütfen tekrar deneyin.', 502, {}, request);
   }
 
   let result;
@@ -687,10 +814,10 @@ Hashtags to analyze:`;
     const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
     result = JSON.parse(jsonMatch ? jsonMatch[0] : cleaned);
   } catch {
-    return error('Hashtag sonuçları işlenemedi. Lütfen tekrar deneyin.', 502);
+    return error('Hashtag sonuçları işlenemedi. Lütfen tekrar deneyin.', 502, {}, request);
   }
 
-  return json({ success: true, result, usage: { today: count, limit: DAILY_LIMIT, remaining: Math.max(0, DAILY_LIMIT - count) } });
+  return json({ success: true, result, usage: { today: count, limit: DAILY_LIMIT, remaining: Math.max(0, DAILY_LIMIT - count) } }, 200, request);
 }
 
 /* ─────────────────────────────────────────────
@@ -702,7 +829,7 @@ export default {
     const method = request.method.toUpperCase();
 
     if (method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: CORS_HEADERS });
+      return new Response(null, { status: 204, headers: getCorsHeaders(request) });
     }
 
     const path = url.pathname.replace(/\/+$/, '');
@@ -728,15 +855,19 @@ export default {
         return await handleHashtagScore(request, env);
       }
 
-      if (path === '/health' && method === 'GET') {
-        return await handleHealth(env);
+      if (path === '/validate-license' && method === 'POST') {
+        return await handleValidateLicense(request, env);
       }
 
-      return error(`Endpoint bulunamadı: ${method} ${path}`, 404);
+      if (path === '/health' && method === 'GET') {
+        return await handleHealth(request, env);
+      }
+
+      return error(`Endpoint bulunamadı: ${method} ${path}`, 404, {}, request);
 
     } catch (err) {
       console.error('Worker genel hata:', err);
-      return error('Sunucu hatası: ' + err.message, 500);
+      return error('Sunucu hatası. Lütfen tekrar deneyin.', 500, {}, request);
     }
   }
 };

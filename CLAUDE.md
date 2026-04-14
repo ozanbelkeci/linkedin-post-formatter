@@ -12,7 +12,7 @@ Chrome Extension (Manifest V3) + Cloudflare Worker proxy. LinkedIn postlarını 
 - Cloudflare Workers (proxy — GROQ_API_KEY gizler, rate limit tutar)
 - Cloudflare KV (rate limit sayacı)
 - Groq API (`llama-3.1-8b-instant`, OpenAI-compatible endpoint)
-- Gumroad (lisans doğrulama — henüz GUMROAD_PRODUCT_ID ayarlanmamış, test modunda)
+- Polar.sh (lisans doğrulama — Organization ID: `5c7dd4fb-9d76-46b4-8ed7-d245be8d64c2`)
 
 ---
 
@@ -25,7 +25,7 @@ linkedin-post-formatter/
 ├── popup.js            — Tüm uygulama mantığı, state yönetimi, API çağrıları
 ├── styles.css          — Özel stiller (Tailwind üstüne), dark/light mode CSS vars
 ├── background.js       — Service worker: usageCount, dailyUsage, GET_STATUS/INCREMENT_USAGE mesajları
-├── license.js          — LicenseManager IIFE: Gumroad verify, isPremium(), checkFeatureAccess()
+├── license.js          — LicenseManager IIFE: Polar.sh verify (worker proxy), isPremium(), validateOnOpen() (24h cache), checkFeatureAccess()
 ├── templates.js        — 14 şablon + CTA_TEXTS (14×5 dil) + templateCTA(id, lang) + parseSections/cleanSection
 ├── drafts.js           — DraftManager IIFE: saveDraft/getDrafts/deleteDraft/loadDraft, MAX_DRAFTS=50
 ├── hookAnalyzer.js     — analyzeHook(text): ilk satırı puanlar, { score, labelKey, emoji, tipKey }
@@ -50,8 +50,9 @@ cloudflare-worker/
 | POST   | `/ab-test`       | `{ text, ton, lang }`             | Alternatif ton versiyonu üret (tek Groq çağrısı, sadece versionB döner) |
 | POST   | `/analyze`       | `{ text }`                        | Viral skor JSON: hook/emotion/shareability/cta/overall/tip |
 | POST   | `/tone-analyze`  | `{ posts: string[] }`             | Ton profili JSON: style/emojiUsage/sentenceLength/personality/keywords |
-| POST   | `/hashtag-score` | `{ hashtags: string[] }`          | Her hashtag için score/popularity/suggestion |
-| GET    | `/health`        | —                                 | usage: { today, limit, remaining } |
+| POST   | `/hashtag-score`     | `{ hashtags: string[] }`      | Her hashtag için score/popularity/suggestion |
+| POST   | `/validate-license`  | `{ key: string }`             | Polar.sh key doğrulama proxy (POLAR_ACCESS_TOKEN gizli) |
+| GET    | `/health`            | —                             | usage: { today, limit, remaining } |
 
 `/format` response: `{ success, result, usage }`
 `/ab-test` response: `{ success, versionB, usage }` — versionA zaten state.formattedText'te, yeniden üretilmez
@@ -77,12 +78,17 @@ Structured promptlar `|||` separator ile N bölüm döndürür. `callGroq()` son
 
 ```js
 DAILY_LIMIT        = 14000   // Global günlük istek limiti (KV)
-PER_IP_DAILY_LIMIT = 120     // IP başına günlük limit
+PER_IP_DAILY_LIMIT = 120     // IP başına günlük Groq limit
+LIC_IP_DAILY_LIMIT = 20      // IP başına günlük validate-license denemesi
 GROQ_MODEL         = 'llama-3.1-8b-instant'
 KV_TTL_SECONDS     = 60 * 60 * 26  // 26 saat
+GROQ_TIMEOUT_MS    = 25000   // AbortController timeout (callGroq)
 ```
 
-KV key format: `daily_count:YYYY-MM-DD` / `ip:daily_count:YYYY-MM-DD:IP`
+KV key format:
+- `daily_count:YYYY-MM-DD` — global Groq sayacı
+- `ip:daily_count:YYYY-MM-DD:IP` — IP bazlı Groq limit
+- `lic_ip:YYYY-MM-DD:IP` — IP bazlı validate-license limit
 
 ---
 
@@ -143,7 +149,7 @@ Düzenleme modunda versiyon karışması önlenir:
 - 3 draft kaydetme (DraftManager.FREE_LIMIT = 3)
 - Onboarding turu
 
-**Premium ($6/ay — Gumroad):**
+**Premium ($6/ay — Polar.sh):**
 - Sınırsız formatlama
 - Tüm 14 şablon
 - A/B test (`/ab-test`)
@@ -162,9 +168,9 @@ PREMIUM_FEATURES: `['ab-test', 'analyze', 'tone', 'hashtag-score', 'unlimited-fo
 
 | Key                  | Tip       | Açıklama                          |
 |----------------------|-----------|-----------------------------------|
-| `licenseKey`         | string    | Gumroad lisans key                |
+| `licenseKey`         | string    | Polar.sh lisans key               |
 | `licenseValid`       | boolean   | Cache'lenmiş doğrulama sonucu     |
-| `licenseVerifiedAt`  | timestamp | Son doğrulama zamanı (24h cache)  |
+| `validatedAt`        | timestamp | Son doğrulama zamanı (24h cache)  |
 | `drafts`             | array     | DraftManager drafts               |
 | `onboardingCompleted`| boolean   | Onboarding tamamlandı mı          |
 | `preferredLanguage`  | string    | 'tr'/'en'/'fr'/'de'/'es'          |
@@ -187,6 +193,7 @@ wrangler dev
 
 # API key secret ekle (ilk kurulum)
 wrangler secret put GROQ_API_KEY
+wrangler secret put POLAR_ACCESS_TOKEN   # Polar.sh Organization Access Token (scope: license_keys:write)
 
 # KV namespace oluştur (ilk kurulum)
 wrangler kv:namespace create RATE_LIMIT_KV
@@ -205,14 +212,37 @@ curl -X POST https://linkedin-post-formatter-api.belkeci-ozan.workers.dev/format
 
 ---
 
+## Lisans Yönetimi UI (Settings sekmesi)
+
+- **`licenseInputGroup`**: Key giriş alanı + "Aktif Et" butonu — free kullanıcıya gösterilir
+- **`licenseActiveGroup`**: Key prefix + "Lisansı Kaldır" butonu + portal linki — premium kullanıcıya gösterilir
+- **Lisansı Kaldır** butonu → `deactivateModal` popup açar:
+  - Uyarı metni (lisans yalnızca bu cihazdan kaldırılır, abonelik devam eder)
+  - "Aboneliğinizi iptal edin →" → `https://polar.sh/ozan-belkeci/portal`
+  - İptal adımları (4 adım — Polar portal akışı; "Overview", "Manage subscription", "Cancel Subscription" İngilizce kalır)
+  - "Vazgeç" ve "Lisansı Kaldır" butonları
+- Tüm modal metinleri `data-i18n` ile 5 dilde dinamik
+
+---
+
+## i18n Sistemi
+
+- **Dosya:** `i18n.js` — `I18N` objesi: `{ tr, en, fr, de, es }` her dil için ~172 key
+- **`t(lang, key)`** — 3 seviyeli fallback: `lang dict → EN → raw key string`
+- **`applyLang(lang)`** — `[data-i18n]` attribute'lu tüm DOM elemanlarını günceller
+- **Dil tespiti:** `detectSystemLang()` — `navigator.language` ile sistem dilini okur; desteklenmiyorsa `'en'` döner
+- **Yeni key grupları (son eklemeler):**
+  - `deactivateModalTitle/Desc1/Desc2/CancelBtn/ConfirmBtn` — Lisansı Kaldır modalı
+  - `portalBtnLabel/portalCancelNote` — Portal butonu ve iptal notu
+  - `cancelStepsTitle/cancelStep1/2/3/4` — İptal adımları
+
+---
+
 ## Tamamlanmamış / Eksik Özellikler
 
 **Yapılmamış:**
 - Dark/light mode CSS variables sistemi (styles.css'te kısmen var ama toggle mekanizması eksik)
 - Klavye kısayolları (Ctrl+S, Ctrl+Enter, Ctrl+C, Esc)
-- Gumroad product ID gerçek değeri (şu an test modunda: `LINKEDIN-PRO-TEST-2024`)
-- Viral analiz sonuç UI (endpoint var, tam entegrasyon belirsiz)
-- Ton profili UI gösterimi
 
 ---
 
@@ -226,16 +256,18 @@ curl -X POST https://linkedin-post-formatter-api.belkeci-ozan.workers.dev/format
 
 4. **Client-side günlük limit** — Ücretsiz kullanıcılar için 10/gün limiti background.js'deki `dailyUsage` sayacıyla tutulur. Worker'ın global limiti ayrı, tüm kullanıcıları kapsar.
 
-5. **License cache 24h** — Gumroad'a her istekte çağrı yapılmaz. `licenseVerifiedAt` + 24h cache. Süre dolunca arka planda yenilenir.
+5. **License cache 24h** — `validateOnOpen()` extension her açılışında çalışır. Cache geçerliyse (`validatedAt` + 24h) Polar API'ye gitmez. Süresi dolunca gerçek sorgu yapar. Ağ hatası → offline cache fallback (kullanıcı cezalandırılmaz). Key iptal → `invalidateLicense()`.
 
-6. **A/B test tek Groq çağrısı** — `/ab-test` sadece `versionB` üretir. `versionA` zaten `state.formattedText`'te mevcut; yeniden üretmek Groq rate limit riskini ikiye katlar.
+6. **Polar proxy zorunlu** — Polar `/v1/license-keys/validate` endpoint'i `license_keys:write` scope'lu Bearer token gerektirir. Token extension'da saklanamaz → worker `/validate-license` endpoint'i proxy görevini üstlenir.
 
-7. **CTA dil izolasyonu** — Kapanış sorusu `state.lang` (UI dili) ile belirlenir, metin içeriğinden dil tespiti yapılmaz. `CTA_TEXTS[templateId][lang]` → `templateCTA(id, lang)`. Her iki versiyon (A ve B) aynı template CTA'yı kullanır.
+7. **A/B test tek Groq çağrısı** — `/ab-test` sadece `versionB` üretir. `versionA` zaten `state.formattedText`'te mevcut; yeniden üretmek Groq rate limit riskini ikiye katlar.
 
-8. **Alternatif Ton CTA** — systemB prompt kasıtlı olarak kapanış sorusu üretmez; client-side `runABTest()` her zaman `\n\n―\n\n` + `templateCTA` ekler. Bu, A ve B arasında format tutarlılığı sağlar.
+8. **CTA dil izolasyonu** — Kapanış sorusu `state.lang` (UI dili) ile belirlenir, metin içeriğinden dil tespiti yapılmaz. `CTA_TEXTS[templateId][lang]` → `templateCTA(id, lang)`. Her iki versiyon (A ve B) aynı template CTA'yı kullanır.
 
-9. **Draft yalnızca formatlanmış metin** — Draft kaydetme raw input'u değil, aktif versiyonun (`formattedText` veya `altText`) metnini kaydeder. Draft liste önizlemesi de bunu gösterir.
+9. **Alternatif Ton CTA** — systemB prompt kasıtlı olarak kapanış sorusu üretmez; client-side `runABTest()` her zaman `\n\n―\n\n` + `templateCTA` ekler. Bu, A ve B arasında format tutarlılığı sağlar.
 
-10. **DraftManager auto-save** — "Auto-save" başlıklı draft her zaman tek kopya tutar (upsert logic). 30s interval popup.js'de.
+10. **Draft yalnızca formatlanmış metin** — Draft kaydetme raw input'u değil, aktif versiyonun (`formattedText` veya `altText`) metnini kaydeder. Draft liste önizlemesi de bunu gösterir.
 
-11. **Gumroad henüz bağlı değil** — `GUMROAD_PRODUCT_ID = 'YOUR_GUMROAD_PRODUCT_ID'` placeholder. Test key: `LINKEDIN-PRO-TEST-2024`.
+11. **DraftManager auto-save** — "Auto-save" başlıklı draft her zaman tek kopya tutar (upsert logic). 30s interval popup.js'de.
+
+12. **Hashtag scored view + 1.5s delay** — `/format` (hashtag modu) çağrısından hemen sonra `/hashtag-score` çağrılırsa Groq per-second rate limit'e çarpılır. `renderHashtags()` içinde 1500ms gecikme ile önlenir.

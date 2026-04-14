@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "TEST - Postify",
+  "name": "Postify",
   "version": "2.0.0",
   "description": "Format your LinkedIn posts instantly. Get more engagement with professional templates, hashtag suggestions, and readability scores.",
-  "permissions": ["storage"],
+  "permissions": ["storage", "tabs"],
   "host_permissions": [
     "https://linkedin-post-formatter-api.belkeci-ozan.workers.dev/*"
   ],
