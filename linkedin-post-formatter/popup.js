@@ -825,22 +825,18 @@ function appendHashtagToAll(tag) {
 async function renderHashtags(text) {
   el.hashtagList.innerHTML = `<span style="font-size:11px;color:var(--text-4)">${escHtml(t(state.lang, 'generatingHashtags'))}</span>`;
 
-  let tags = [];
-  const aiResult = await fixTextWithAI(text, 'hashtags');
-  if (aiResult) {
-    tags = aiResult.match(/#[\w\u00C0-\u024F\u0130\u0131]+/g) || [];
-  }
-  if (!tags.length) tags = suggestHashtags(text);
+  // Client-side öneri — ekstra Groq çağrısı yapmaz, rate limit riski yok
+  const tags = suggestHashtags(text);
 
   if (!tags.length) {
     el.hashtagList.innerHTML = '';
     return;
   }
 
-  // Groq per-second rate limit: /format (hashtags) çağrısından sonra kısa bekleme
-  await new Promise(r => setTimeout(r, 1500));
+  // /format çağrısının Groq rate limit'ini geçmesi için bekleme
+  await new Promise(r => setTimeout(r, 2000));
 
-  // Direkt scored view'e geç; API başarısız olursa chip fallback
+  // Scored view; API başarısız olursa chip fallback
   const ok = await runHashtagScore(tags.slice(0, 8));
   if (!ok) {
     el.hashtagList.innerHTML = '';
