@@ -207,6 +207,14 @@ function applyLang(lang) {
       ? t(lang, 'proplanActive')
       : t(lang, 'freePlan');
   }
+  // License key prefix label (dynamically set, not data-i18n)
+  if (el.licenseKeyPrefix && el.licenseKeyPrefix.textContent.includes('••••')) {
+    LicenseManager.getLicenseInfo().then(info => {
+      if (info.key) {
+        el.licenseKeyPrefix.textContent = info.key.slice(0, 8).toUpperCase() + '••••  ✓ ' + t(lang, 'premiumActive');
+      }
+    });
+  }
   // API status (re-render if already checked)
   if (el.apiStatusDot) {
     if (el.apiStatusDot.classList.contains('ok'))  el.apiStatusText.textContent = t(lang, 'apiOnline');
@@ -238,7 +246,7 @@ function applyPremiumUI() {
     // Show first 8 chars of the key
     LicenseManager.getLicenseInfo().then(info => {
       if (el.licenseKeyPrefix && info.key) {
-        el.licenseKeyPrefix.textContent = info.key.slice(0, 8).toUpperCase() + '••••  ✓ Premium Aktif';
+        el.licenseKeyPrefix.textContent = info.key.slice(0, 8).toUpperCase() + '••••  ✓ ' + t(state.lang, 'premiumActive');
       }
     });
   } else {

@@ -181,6 +181,7 @@ const I18N = {
     cancelStep2:            'E-postanıza gelen onay kodunu girin.',
     cancelStep3:            '"Overview" sayfasında "Manage subscription" butonuna tıklayın.',
     cancelStep4:            '"Cancel Subscription" butonuna tıklayarak iptal edin.',
+    premiumActive:          'Premium Aktif',
     // Premium modal
     dialogSub:          'Tüm şablonları, hashtag analizini, viral analizi, A/B testini ve daha fazlasını aç.',
     feat1:              '10+ profesyonel şablon',
@@ -397,6 +398,7 @@ const I18N = {
     cancelStep2:            'Enter the confirmation code sent to your email.',
     cancelStep3:            'On the "Overview" page, click the "Manage subscription" button.',
     cancelStep4:            'Click "Cancel Subscription" to complete the cancellation.',
+    premiumActive:          'Premium Active',
     // Premium modal
     dialogSub:          'Unlock every template, hashtag intelligence, viral analysis, A/B testing, and more.',
     feat1:              '10+ professional templates',
@@ -613,6 +615,7 @@ const I18N = {
     cancelStep2:            'Entrez le code de confirmation envoyé à votre e-mail.',
     cancelStep3:            'Sur la page "Overview", cliquez sur le bouton "Manage subscription".',
     cancelStep4:            'Cliquez sur "Cancel Subscription" pour finaliser l\'annulation.',
+    premiumActive:          'Premium Actif',
     // Premium modal
     dialogSub:          'Débloquez tous les modèles, l\'intelligence des hashtags, l\'analyse virale, les tests A/B et plus encore.',
     feat1:              '10+ modèles professionnels',
@@ -827,6 +830,7 @@ const I18N = {
     cancelStep2:            'Geben Sie den Bestätigungscode ein, der an Ihre E-Mail gesendet wurde.',
     cancelStep3:            'Klicken Sie auf der "Overview"-Seite auf die Schaltfläche "Manage subscription".',
     cancelStep4:            'Klicken Sie auf "Cancel Subscription", um die Kündigung abzuschließen.',
+    premiumActive:          'Premium Aktiv',
     // Premium modal
     dialogSub:          'Schalten Sie alle Vorlagen, Hashtag-Intelligenz, virale Analyse, A/B-Tests und mehr frei.',
     feat1:              '10+ professionelle Vorlagen',
@@ -1041,6 +1045,7 @@ const I18N = {
     cancelStep2:            'Ingresa el código de confirmación enviado a tu correo.',
     cancelStep3:            'En la página "Overview", haz clic en el botón "Manage subscription".',
     cancelStep4:            'Haz clic en "Cancel Subscription" para completar la cancelación.',
+    premiumActive:          'Premium Activo',
     // Premium modal
     dialogSub:          'Desbloquea todas las plantillas, inteligencia de hashtags, análisis viral, pruebas A/B y más.',
     feat1:              '10+ plantillas profesionales',
