@@ -404,13 +404,13 @@ function renderPreviewText(text, container, maxLines, maxChars) {
 
   const seeMoreBtn = document.createElement('button');
   seeMoreBtn.className = 'preview-see-more-btn';
-  seeMoreBtn.textContent = t(state.lang, 'seeMore');
+  seeMoreBtn.textContent = '...' + t(state.lang, 'seeMore');
 
   let expanded = false;
   seeMoreBtn.addEventListener('click', () => {
     expanded = !expanded;
     after.hidden = !expanded;
-    seeMoreBtn.textContent = expanded ? t(state.lang, 'seeLess') : t(state.lang, 'seeMore');
+    seeMoreBtn.textContent = expanded ? t(state.lang, 'seeLess') : '...' + t(state.lang, 'seeMore');
   });
 
   target.appendChild(before);
