@@ -8,7 +8,7 @@
     "https://linkedin-post-formatter-api.belkeci-ozan.workers.dev/*"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'"
+    "extension_pages": "script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'self'"
   },
   "action": {
     "default_popup": "popup.html",

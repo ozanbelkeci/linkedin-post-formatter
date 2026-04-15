@@ -784,7 +784,7 @@ async function handleHashtagScore(request, env) {
   const { hashtags } = body;
   if (!Array.isArray(hashtags) || hashtags.length === 0) return error('"hashtags" alanı boş olamaz.', 400, {}, request);
   if (hashtags.length > 20) return error('En fazla 20 hashtag gönderilebilir.', 400, {}, request);
-  const validHashtags = hashtags.filter(h => typeof h === 'string' && h.startsWith('#') && h.length > 1 && h.length <= 100);
+  const validHashtags = hashtags.filter(h => typeof h === 'string' && h.startsWith('#') && h.length > 1 && h.length <= 30 && /^#[a-zA-Z0-9_]{1,29}$/.test(h));
   if (validHashtags.length === 0) return error('Geçerli hashtag bulunamadı. # ile başlamalı.', 400, {}, request);
 
   const clientIp = request.headers.get('CF-Connecting-IP') || '';
