@@ -1,5 +1,5 @@
 /* =============================================
-   Postify — Service Worker
+   Postevo — Service Worker
    Manifest V3 Background Script
    ============================================= */
 
@@ -8,7 +8,7 @@
 // Extension yüklendiğinde çalışır
 chrome.runtime.onInstalled.addListener(({ reason }) => {
   if (reason === 'install') {
-    console.log('[Postify] Extension yüklendi. Hoş geldiniz!');
+    console.log('[Postevo] Extension yüklendi. Hoş geldiniz!');
 
     // Varsayılan ayarları kaydet
     chrome.storage.local.set({
@@ -19,7 +19,7 @@ chrome.runtime.onInstalled.addListener(({ reason }) => {
     });
 
   } else if (reason === 'update') {
-    console.log('[Postify] Extension güncellendi.');
+    console.log('[Postevo] Extension güncellendi.');
   }
 });
 

@@ -1,5 +1,5 @@
 /* =============================================
-   Postify — i18n (UI Dilleri)
+   Postevo — i18n (UI Dilleri)
    ============================================= */
 
 'use strict';
@@ -7,7 +7,7 @@
 const I18N = {
   tr: {
     write:              'Yaz',
-    appTitle:           'Postify',
+    appTitle:           'Postevo',
     btnUpgrade:         'Pro\'ya Geç',
     templateLabel:      'Şablon',
     toneLabel:          'Ton',
@@ -224,7 +224,7 @@ const I18N = {
   },
   en: {
     write:              'Write',
-    appTitle:           'Postify',
+    appTitle:           'Postevo',
     btnUpgrade:         'Upgrade to Pro',
     templateLabel:      'Template',
     toneLabel:          'Tone',
@@ -441,7 +441,7 @@ const I18N = {
   },
   fr: {
     write:              'Écrire',
-    appTitle:           'Postify',
+    appTitle:           'Postevo',
     btnUpgrade:         'Passer à Pro',
     templateLabel:      'Modèle',
     toneLabel:          'Ton',
@@ -656,7 +656,7 @@ const I18N = {
   },
   de: {
     write:              'Schreiben',
-    appTitle:           'Postify',
+    appTitle:           'Postevo',
     btnUpgrade:         'Auf Pro upgraden',
     templateLabel:      'Vorlage',
     toneLabel:          'Ton',
@@ -871,7 +871,7 @@ const I18N = {
   },
   es: {
     write:              'Escribir',
-    appTitle:           'Postify',
+    appTitle:           'Postevo',
     btnUpgrade:         'Actualizar a Pro',
     templateLabel:      'Plantilla',
     toneLabel:          'Tono',

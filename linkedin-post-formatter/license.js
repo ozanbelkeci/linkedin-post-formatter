@@ -1,5 +1,5 @@
 /* =============================================
-   Postify — Lisans Yönetimi
+   Postevo — Lisans Yönetimi
    Polar.sh License Key API Entegrasyonu
    ============================================= */
 

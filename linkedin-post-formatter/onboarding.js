@@ -1,5 +1,5 @@
 /* =============================================
-   Postify — Onboarding Turu
+   Postevo — Onboarding Turu
    ============================================= */
 
 'use strict';
